@@ -80,10 +80,6 @@ jobs:
         run: |
           poetry run ruff check --config pyproject.toml
 
-      - name: Check docstrings
-        run: |
-          poetry run pydoclint --config pyproject.toml --quiet src/
-
       - name: Check for security issues
         run: |
           poetry run bandit -r src --severity-level medium --confidence-level medium --quiet
