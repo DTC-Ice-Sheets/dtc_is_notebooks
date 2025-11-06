@@ -28,7 +28,7 @@ sphinx = "^8.2.3"
 sphinx-rtd-theme = "^3.0.2"
 sphinx-copybutton = "^0.5.2"
 commitizen = "^4.9.1"
-pydoclint = "^0.7.6"
+pydoclint = "^0.8.1"
 
 [tool.ruff]
 line-length = 120
