@@ -1,0 +1,242 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adapting the DTC template for your module &mdash; DTC Ice Sheets Development Guide  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Meeting Code Standards" href="code_standards.html" />
+    <link rel="prev" title="Development Environment" href="development_environment.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            DTC Ice Sheets Development Guide
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">How do I...:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="development_environment.html">Set up my environment?</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Create my repository?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#copy-the-template">Copy the template</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#update-template-code-and-trigger-first-successful-workflow">Update template code and trigger first successful workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configure-repository-settings">Configure repository settings</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#update-general-settings">Update General settings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#set-up-collaborators-and-teams">Set up Collaborators and teams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#set-up-code-security-and-analysis">Set up Code security and analysis</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#set-up-branch-protection">Set up branch protection</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#final-updates">Final updates</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="code_standards.html">Adhere to coding standards?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development_workflow.html">Contribute to the codebase?</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DTC Ice Sheets Development Guide</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Adapting the DTC template for your module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/create_repository.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="adapting-the-dtc-template-for-your-module">
+<h1>Adapting the DTC template for your module<a class="headerlink" href="#adapting-the-dtc-template-for-your-module" title="Link to this heading"></a></h1>
+<p>Each DTC Python module should have an associated repository within the <a class="reference external" href="https://github.com/DTC-Ice-Sheets">DTC Ice Sheets GitHub organisation</a>.
+Each such repository should be created from the <a class="reference external" href="https://github.com/DTC-Ice-Sheets/dtc_python_template">template provided by the dev team</a>.
+This section explains how to adapt this template for your module.</p>
+<p>If you are unfamiliar with GitHub, git, or CI/CD, please ask one of the members of the <a class="reference external" href="https://github.com/orgs/DTC-Ice-Sheets/teams/engineering">DTC engineering team</a>
+to help you set up your repository!</p>
+<section id="copy-the-template">
+<h2>Copy the template<a class="headerlink" href="#copy-the-template" title="Link to this heading"></a></h2>
+<p>To start, navigate to the <a class="reference external" href="https://github.com/DTC-Ice-Sheets/dtc_python_template">DTC Python template repository</a>
+and click <code class="docutils literal notranslate"><span class="pre">Use</span> <span class="pre">This</span> <span class="pre">Template</span></code> in the top right corner.</p>
+<p>Please provide a repository name (consider this carefully!) as well as a description. If your repository name
+is made up of multiple words, please separate them with underscores (_).</p>
+<p>Set the repository to <code class="docutils literal notranslate"><span class="pre">Private</span></code> and click <code class="docutils literal notranslate"><span class="pre">Create</span> <span class="pre">repository</span></code>.</p>
+</section>
+<section id="update-template-code-and-trigger-first-successful-workflow">
+<h2>Update template code and trigger first successful workflow<a class="headerlink" href="#update-template-code-and-trigger-first-successful-workflow" title="Link to this heading"></a></h2>
+<p>The next thing you should do is clone the repository to your computer and make a single commit to a <strong>new branch</strong> in
+which you have:</p>
+<ul>
+<li><p>changed <code class="docutils literal notranslate"><span class="pre">dtc_python_template</span></code> to <code class="docutils literal notranslate"><span class="pre">your_new_package</span></code> everywhere in the code</p></li>
+<li><p>changed <code class="docutils literal notranslate"><span class="pre">dtc-python-template</span></code> to <code class="docutils literal notranslate"><span class="pre">your-new-package</span></code> everywhere in the code</p></li>
+<li><p>renamed files and folder that include <code class="docutils literal notranslate"><span class="pre">dtc_python_template</span></code> to <code class="docutils literal notranslate"><span class="pre">your_new_package</span></code> (remember to look in the
+<code class="docutils literal notranslate"><span class="pre">.github/workflows</span></code> folder as well!)</p></li>
+<li><p>updated the <code class="docutils literal notranslate"><span class="pre">[tool.poetry]</span></code> section of the <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> file:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Update the description and authors</p></li>
+<li><p>Update the version to 0.0.0, if your package is still under development, or 1.0.0 if you are porting over
+production-ready code from another source</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Changed the CHANGELOG.md file to reflect the chosen version</p></li>
+</ul>
+<p>Push these changes and wait for the CI chain to complete succesfully (a green tick on the actions page). This should
+take a few minutes at most. Once that happens, merge your first branch to main and delete it.
+Look under the “actions” tab for a green tick. if you see an orange circle, wait for it to finish and result in a green
+tick (you may need to refresh the page).</p>
+<p>If the chain completes successfully, you’re ready to proceed. If not, go back and make sure you’ve updated all instances
+of <code class="docutils literal notranslate"><span class="pre">dtc_python_template</span></code> and <code class="docutils literal notranslate"><span class="pre">dtc-python-template</span></code>, including for file names and folder names, and push again.</p>
+</section>
+<section id="configure-repository-settings">
+<h2>Configure repository settings<a class="headerlink" href="#configure-repository-settings" title="Link to this heading"></a></h2>
+<p>You should now change some settings for your new repository.</p>
+<section id="update-general-settings">
+<h3>Update General settings<a class="headerlink" href="#update-general-settings" title="Link to this heading"></a></h3>
+<p>First, hit <code class="docutils literal notranslate"><span class="pre">Settings</span></code> from the top menu and then <code class="docutils literal notranslate"><span class="pre">General</span></code> on the left menu.</p>
+<p>Ensure the following are <em>not</em> ticked:</p>
+<ul class="simple">
+<li><p>Template repository</p></li>
+<li><p>Require contributors to sign off on web-based commits</p></li>
+<li><p>Wikis</p></li>
+<li><p>Issues</p></li>
+<li><p>Projects</p></li>
+<li><p>Allow squash merging</p></li>
+<li><p>Allow rebase merging</p></li>
+</ul>
+<p>Ensure the following <em>are</em> ticked:</p>
+<ul class="simple">
+<li><p>Always suggest updating pull request branches</p></li>
+<li><p>Allow auto-merge</p></li>
+<li><p>Automatically delete head branches</p></li>
+</ul>
+</section>
+<section id="set-up-collaborators-and-teams">
+<h3>Set up Collaborators and teams<a class="headerlink" href="#set-up-collaborators-and-teams" title="Link to this heading"></a></h3>
+<p>In order for the GitHub Code Owners feature to work with GitHub teams, teams need to be given explicit write access to
+the repository. The Base Role does not cover this. On the left menu, under the <code class="docutils literal notranslate"><span class="pre">Collaborators</span> <span class="pre">and</span> <span class="pre">Teams</span></code> tab, add at
+minimum the engineering team (with admin privileges), plus any additional teams that are relevant to the repository.</p>
+</section>
+<section id="set-up-code-security-and-analysis">
+<h3>Set up Code security and analysis<a class="headerlink" href="#set-up-code-security-and-analysis" title="Link to this heading"></a></h3>
+<p>Sticking with the left menu, under the <code class="docutils literal notranslate"><span class="pre">Code</span> <span class="pre">security</span></code> tab, enable all of the options except <code class="docutils literal notranslate"><span class="pre">Dependabot</span> <span class="pre">on</span> <span class="pre">self-hosted</span> <span class="pre">runners</span></code>.
+Ensure that when you hit <code class="docutils literal notranslate"><span class="pre">Configure</span></code> next to <code class="docutils literal notranslate"><span class="pre">Dependabot</span> <span class="pre">version</span> <span class="pre">updates</span></code>, you see a config file which matches
+<code class="docutils literal notranslate"><span class="pre">.github/dependabot.yml</span></code> in the template. No further setup should be necessary for Dependabot.</p>
+</section>
+<section id="set-up-branch-protection">
+<h3>Set up branch protection<a class="headerlink" href="#set-up-branch-protection" title="Link to this heading"></a></h3>
+<p>The next thing you need to set up is branch protection rules. These are <em>not</em> automatically copied over from the
+template repository. Hit <code class="docutils literal notranslate"><span class="pre">Settings</span></code> from the top menu, then <code class="docutils literal notranslate"><span class="pre">branches</span></code> on the left menu, then <code class="docutils literal notranslate"><span class="pre">add</span> <span class="pre">classic</span> <span class="pre">branch</span> <span class="pre">protection</span> <span class="pre">rule</span></code>
+on the right. Only one branch protection rule needs to be added (for main).</p>
+<p>Type <code class="docutils literal notranslate"><span class="pre">main</span></code> into the Branch name pattern box. Then, ensure the following <em>are</em> ticked:</p>
+<ul>
+<li><p>Require a pull request before merging</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Require approvals (and set the Required number of approvals before merging to 1)</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Require status checks to pass before merging</p>
+<blockquote>
+<div><ul>
+<li><p>Require branches to be up to date before merging</p></li>
+<li><p>Select the following status checks:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>test / lint_and_test</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+</div></blockquote>
+</li>
+<li><p>Require conversation resolution before merging</p></li>
+<li><p>Do not allow bypassing the above settings</p></li>
+</ul>
+<p>Ensure that none of the other options are ticked.</p>
+</section>
+</section>
+<section id="final-updates">
+<h2>Final updates<a class="headerlink" href="#final-updates" title="Link to this heading"></a></h2>
+<p>Note that after you’ve finished adapting the template for your use, you should re-write its <code class="docutils literal notranslate"><span class="pre">README</span></code> file so that it
+discusses your module in more detail. You should update the project description in the <code class="docutils literal notranslate"><span class="pre">About</span></code> section on GitHub for
+the repository for the same reason.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="development_environment.html" class="btn btn-neutral float-left" title="Development Environment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="code_standards.html" class="btn btn-neutral float-right" title="Meeting Code Standards" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright .</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

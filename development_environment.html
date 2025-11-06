@@ -1,0 +1,230 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Development Environment &mdash; DTC Ice Sheets Development Guide  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Adapting the DTC template for your module" href="create_repository.html" />
+    <link rel="prev" title="DTC Ice Sheets Development Guide" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            DTC Ice Sheets Development Guide
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">How do I...:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Set up my environment?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#set-up-an-ide">Set up an IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#install-python">Install Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#install-poetry">Install Poetry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#install-git">Install Git</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="create_repository.html">Create my repository?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code_standards.html">Adhere to coding standards?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development_workflow.html">Contribute to the codebase?</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DTC Ice Sheets Development Guide</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Development Environment</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/development_environment.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="development-environment">
+<h1>Development Environment<a class="headerlink" href="#development-environment" title="Link to this heading"></a></h1>
+<p>This section will walk you through installing and setting up core tools required to work on the DTC project.</p>
+<section id="set-up-an-ide">
+<h2>Set up an IDE<a class="headerlink" href="#set-up-an-ide" title="Link to this heading"></a></h2>
+<p>We recommend using <a class="reference external" href="https://code.visualstudio.com/">Visual Studio Code (VS Code)</a> as your Integrated Development
+Environment (IDE) for this project. The DTC Python package template is pre-configured for automatic formatting and
+linting in VSCode. These features provide real-time feedback such as warnings and tips as you type, and ensure that e.g.
+files are automatically saved for you whenever you make updates.</p>
+<p>Please download VSCode from <a class="reference external" href="https://code.visualstudio.com/Download">the official website</a>.</p>
+<p>To ensure workspace-specific settings and extensions are applied correctly, always open your repository at its
+top-level in your VSCode window. You can do this by navigating to the repository folder in a terminal and typing the
+command <code class="docutils literal notranslate"><span class="pre">code</span> <span class="pre">.</span></code>.</p>
+<p>For example, when cloning a repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/DTC-Ice_Sheets/example-repo.git
+<span class="nb">cd</span><span class="w"> </span>example-repo
+code<span class="w"> </span>.
+</pre></div>
+</div>
+<p>The above clones the repository, navigates to the repo’s top level folder, and then opens a VSCode window for this
+location!</p>
+<p>When you open a repository in VSCode for the first time, you should see a notification in the bottom-right corner of
+the window, prompting you to install recommended extensions:</p>
+<a class="reference internal image-reference" href="_images/vscode_recommendations.png"><img alt="_images/vscode_recommendations.png" class="align-center" src="_images/vscode_recommendations.png" style="width: 500px;" />
+</a>
+<p>Please click <code class="docutils literal notranslate"><span class="pre">Install</span> <span class="pre">All</span></code> to automatically install the necessary extensions. If this notification does not appear,
+you can install them manually through the Extensions tab. Please see <a class="reference external" href="https://code.visualstudio.com/docs/editor/extension-marketplace">this page</a>
+for more information.</p>
+</section>
+<section id="install-python">
+<h2>Install Python<a class="headerlink" href="#install-python" title="Link to this heading"></a></h2>
+<p>All DTC modules should be implemented as Python packages.</p>
+<p>We recommend installing Python 3.12 as it provides better performance and longer support. However, some dependencies
+(e.g. Pytorch, Tensorflow) may not yet be fully compatible with this version. If you run into installation issues with
+your dependencies, please try downgrading to Python 3.11.</p>
+<p>We recommend installing Python through Miniconda. To do this, you may follow the <a class="reference external" href="https://docs.anaconda.com/miniconda/install/#quick-command-line-install">quick command-line instructions</a>,
+or download a graphical installer for your operating system <a class="reference external" href="https://docs.anaconda.com/miniconda/install/">here</a> for
+a more user-friendly interface.</p>
+<p>Once installed, you may create and activate a virtual environment with the appropriate version of Python with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>--name<span class="w"> </span>dtc<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.12
+conda<span class="w"> </span>activate<span class="w"> </span>dtc
+</pre></div>
+</div>
+<p>Please note you may replace <code class="docutils literal notranslate"><span class="pre">dtc</span></code> with any other preferred name for your virtual environment.</p>
+<p>If you prefer to install Python directly in your environment instead of using conda, you may retrieve Python 3.12 from
+the <a class="reference external" href="https://www.python.org/downloads/">official download page</a>.</p>
+</section>
+<section id="install-poetry">
+<h2>Install Poetry<a class="headerlink" href="#install-poetry" title="Link to this heading"></a></h2>
+<p>The DTC Python template uses <a class="reference external" href="https://python-poetry.org">poetry</a> to easily manage package dependencies.</p>
+<p>If you have installed Python in a Miniconda virtual environment as suggested above, you may simply install Poetry with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>activate<span class="w"> </span>dtc
+conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span><span class="nv">poetry</span><span class="o">=</span><span class="m">2</span>.1
+</pre></div>
+</div>
+<p>Alternatively, if you prefer to install Poetry directly in your environment, you may use the <a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">provided instructions</a>.
+Normally, this should simply require running:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-sSL<span class="w"> </span>https://install.python-poetry.org<span class="w"> </span><span class="p">|</span><span class="w"> </span>python3
+</pre></div>
+</div>
+<p>Verify the installation with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>If this command fails, you may need to add Poetry to your system’s PATH. See the official
+<a class="reference external" href="https://python-poetry.org/docs/#installing-with-the-official-installer">installation guide</a> for assistance.</p>
+</section>
+<section id="install-git">
+<h2>Install Git<a class="headerlink" href="#install-git" title="Link to this heading"></a></h2>
+<p>Git is a version control system which we will allow us to manage the DTC codebase development and coollaborate
+effectively.</p>
+<p>Please install Git by following the <a class="reference external" href="https://git-scm.com/downloads">instructions for your operating system</a>.</p>
+<p>Then, verify the installation with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>You will have to authenticate with your GitHub account - please make sure you use the GitHub account that is a part
+of the <a class="reference external" href="https://github.com/DTC-Ice-Sheets">DTC Ice Sheets GitHub Organisation</a>.</p>
+<p>There are many ways to <a class="reference external" href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#authenticating-with-the-command-line">authenticate with GitHub</a>
+. For example, you can choose to install the <a class="reference external" href="https://cli.github.com/">GitHub CLI</a> and authenticate using the
+<code class="docutils literal notranslate"><span class="pre">gh</span> <span class="pre">auth</span> <span class="pre">login</span></code> command, or generate a GitHub personal access token and then use a credentials manager to store it.
+If you use the VSCode Source Control tool, you may simply be prompted to sign in the first time you interact with the
+repository (i.e. push/pull/commit).</p>
+<p>We recommend generating an SSH key pair for your computer and passing the public key to GitHub. Please note these
+instructions have only been tested on Linux and may be more technical than the options above.</p>
+<p>First, setup some core config (replace with details for your account):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>user.name<span class="w"> </span><span class="s2">&quot;Jane Doe&quot;</span>
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>user.email<span class="w"> </span>jane.doe@earthwave.co.uk
+git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>credential.helper<span class="w"> </span>store
+</pre></div>
+</div>
+<p>Next, generate an SSH key pair:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh-keygen<span class="w"> </span>-t<span class="w"> </span>ed25519<span class="w"> </span>-C<span class="w"> </span>&lt;GITHUB_USER_EMAIL&gt;
+</pre></div>
+</div>
+<p>Press Enter three times (use defaults)</p>
+<p>Start the ssh-agent in the background:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">eval</span><span class="w"> </span><span class="k">$(</span>ssh-agent<span class="w"> </span>-s<span class="k">)</span>
+</pre></div>
+</div>
+<p>Add the key:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ssh-add<span class="w"> </span>~/.ssh/id_ed25519
+</pre></div>
+</div>
+<p>Log in to GitHub as yourself. Click on your profile in top right, select Settings -&gt; SSH and GPG keys -&gt; New SSH key.</p>
+<p>On your computer, copy the public key to clipboard (output of command below) and paste into the GitHub website:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cat<span class="w"> </span>~/.ssh/id_ed25519.pub
+</pre></div>
+</div>
+<p>If done correctly, a git pull/push/clone to GitHub should now work seamlessly!</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="DTC Ice Sheets Development Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="create_repository.html" class="btn btn-neutral float-right" title="Adapting the DTC template for your module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright .</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,366 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Development Workflow &mdash; DTC Ice Sheets Development Guide  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Meeting Code Standards" href="code_standards.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            DTC Ice Sheets Development Guide
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">How do I...:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="development_environment.html">Set up my environment?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="create_repository.html">Create my repository?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code_standards.html">Adhere to coding standards?</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Contribute to the codebase?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#install-repository-for-development">Install repository for development</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#use-git">Use Git</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#using-branches">Using branches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#staging-changes">Staging changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#committing-and-pushing-changes">Committing and pushing changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stashing-changes">Stashing changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#syncing-with-remote">Syncing with remote</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#work-with-pre-commit-hooks">Work with pre-commit hooks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#manage-dependencies-with-poetry">Manage dependencies with poetry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#raise-a-pull-request">Raise a Pull Request</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#versioning-and-releases">Versioning and releases</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DTC Ice Sheets Development Guide</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Development Workflow</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/development_workflow.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="development-workflow">
+<h1>Development Workflow<a class="headerlink" href="#development-workflow" title="Link to this heading"></a></h1>
+<p>This page assumes that you have already <a class="reference external" href="development_environment.html">set up your development environment</a>, the
+repository for the module you would like to work on has already <a class="reference external" href="create_repository.html">been created</a>, and you
+understand how to write code which adheres to the project’s <a class="reference external" href="code_standards.html">code standards</a>.</p>
+<p>It covers the final instructions you need to contribute to the DTC codebase, including how to:</p>
+<ul class="simple">
+<li><p>install a DTC Python package on your local machine so that you can modify its code;</p></li>
+<li><p>use git to manage and push your changes to the repository;</p></li>
+<li><p>use pre-commit hooks to easily meet our code standards;</p></li>
+<li><p>modify package dependencies with poetry;</p></li>
+<li><p>raise Pull Requests to incorporate your code into the main codebase.</p></li>
+</ul>
+<section id="install-repository-for-development">
+<h2>Install repository for development<a class="headerlink" href="#install-repository-for-development" title="Link to this heading"></a></h2>
+<p>Let’s say that you would like to work on a DTC Ice Sheets repository called <code class="docutils literal notranslate"><span class="pre">awesome_python_package</span></code>.</p>
+<p>First, we must clone the repository, navigate to the newly created folder, and open it in VSCode:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/dtc-ice-sheets/awesome_python_package.git
+<span class="nb">cd</span><span class="w"> </span>awesome_python_package
+code<span class="w"> </span>.
+</pre></div>
+</div>
+<p>Now, we can install the package for development and activate the environment.</p>
+<p>If you are using conda to manage your Python and Poetry install, please prepare your environment:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>create<span class="w"> </span>--name<span class="w"> </span>dtc<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.12
+conda<span class="w"> </span>activate<span class="w"> </span>dtc
+conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span><span class="nv">poetry</span><span class="o">=</span><span class="m">2</span>.1
+poetry<span class="w"> </span>config<span class="w"> </span>virtualenvs.create<span class="w"> </span><span class="nb">false</span>
+</pre></div>
+</div>
+<p>Then, install the package for development with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>install<span class="w"> </span>--with<span class="w"> </span>dev
+</pre></div>
+</div>
+<p>Specifying the <code class="docutils literal notranslate"><span class="pre">--with</span> <span class="pre">dev</span></code> flag ensures that dependencies required for linting, formatting, and testing are installed
+alongside the core dependencies our package requires (e.g. <code class="docutils literal notranslate"><span class="pre">numpy</span></code>).</p>
+<p>You should now <a class="reference external" href="https://code.visualstudio.com/docs/python/environments#_select-and-activate-an-environment">tell VSCode to use the interpreter within the environment you’ve just created</a>.</p>
+<p>Next, install the pre-commit hooks:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pre-commit<span class="w"> </span>install
+</pre></div>
+</div>
+<p>Now, you should be able to run and pass the pre-commit hooks in your environment.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pre-commit<span class="w"> </span>--all
+</pre></div>
+</div>
+<p>The step above will run the repository unit tests, but you may also run them on their own with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pytest
+</pre></div>
+</div>
+<p>You are now ready to start contributing to the codebase!</p>
+</section>
+<section id="use-git">
+<h2>Use Git<a class="headerlink" href="#use-git" title="Link to this heading"></a></h2>
+<p>This section provides a bit of a cheatsheet to most useful git commands and introduces some of the git terminology which
+is used in later portions of this page.</p>
+<p>If you have never used git before, there are plenty of resources online to help you get up to speed :)</p>
+<section id="using-branches">
+<h3>Using branches<a class="headerlink" href="#using-branches" title="Link to this heading"></a></h3>
+<p>Branches allow you to work on different features or fixes independently. The <code class="docutils literal notranslate"><span class="pre">main</span></code> branch is our production branch -
+you cannot add code to it directly. Instead, you should your own branch, add code to it and raise a Pull Request (PR).
+There’s a PR template that will appear when you create a brand new PR. The use of it is not mandatory is just to help
+the reviewers understand better the changes introduced by the PR.
+Once your PR is approved, the code will be merged to main.</p>
+<p>To create a branch and switch to it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </span>your-branch-name
+</pre></div>
+</div>
+<p>To switch to a branch that already exists:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>checkout<span class="w"> </span>your-branch-name
+</pre></div>
+</div>
+<p>Sometimes, you may want to add changes from another branch to yours. For example, if new changes have been added to
+<code class="docutils literal notranslate"><span class="pre">main</span></code> and you would like to incorporate them into your branch:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>checkout<span class="w"> </span>your-branch-name
+git<span class="w"> </span>merge<span class="w"> </span>origin<span class="w"> </span>main
+</pre></div>
+</div>
+</section>
+<section id="staging-changes">
+<h3>Staging changes<a class="headerlink" href="#staging-changes" title="Link to this heading"></a></h3>
+<p>In Git, you have to explicitly state which of your local modifications should be included in your next commit. You do
+this by adding your change to the <code class="docutils literal notranslate"><span class="pre">Staging</span> <span class="pre">Area</span></code>.</p>
+<p>To see your local changes, both staged and unchanged:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>status
+</pre></div>
+</div>
+<p>To stage a specific file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>add<span class="w"> </span>path/to/file
+</pre></div>
+</div>
+<p>To review your staged changes:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>diff<span class="w"> </span>--staged
+</pre></div>
+</div>
+</section>
+<section id="committing-and-pushing-changes">
+<h3>Committing and pushing changes<a class="headerlink" href="#committing-and-pushing-changes" title="Link to this heading"></a></h3>
+<p>Once all your desired changes are staged, you can commit with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Your descriptive commit message&quot;</span>
+</pre></div>
+</div>
+<p>Finally, you can perform a push to update the remote repository with your changes:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>your-branch-name
+</pre></div>
+</div>
+</section>
+<section id="stashing-changes">
+<h3>Stashing changes<a class="headerlink" href="#stashing-changes" title="Link to this heading"></a></h3>
+<p>Git provides a feature called <em>stash</em> that allows you to temporarily save and hide changes that you haven’t committed
+yet, enabling you to work on something else and come back to your changes later. This is useful when you need to switch
+branches or do other work, but you don’t want to commit your current changes yet.</p>
+<p>To stash your current changes:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>stash
+</pre></div>
+</div>
+<p>This will save any modifications you have made to tracked files (i.e. those that have already been committed in the
+past) and revert them back to the state of the last commit. Untracked or ignored files will not be stashed by default.</p>
+<p>To list your stashed changes, use:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>stash<span class="w"> </span>list
+</pre></div>
+</div>
+<p>Which will display all your changes alongside their stash indices (e.g. <cite>stash&#64;{1}</cite>) which you can then use to reference
+a stash.</p>
+<p>And when you are ready to reapply your changes, use:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>stash<span class="w"> </span>apply<span class="w"> </span>&lt;chosen-stash-index&gt;
+</pre></div>
+</div>
+<p>Finally, the pop command is useful - this will re-apply your most recently stashed changes and remove them from the
+stash list:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>stash<span class="w"> </span>pop
+</pre></div>
+</div>
+</section>
+<section id="syncing-with-remote">
+<h3>Syncing with remote<a class="headerlink" href="#syncing-with-remote" title="Link to this heading"></a></h3>
+<p>Sometimes, the local copy of the repository may become out of sync with the remote (i.e. version of the repository
+hosted in GitHub). To fetch and pull changes:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>fetch
+git<span class="w"> </span>pull
+</pre></div>
+</div>
+</section>
+</section>
+<section id="work-with-pre-commit-hooks">
+<h2>Work with pre-commit hooks<a class="headerlink" href="#work-with-pre-commit-hooks" title="Link to this heading"></a></h2>
+<p>The DTC template is configured to use pre-commit hooks - a set of steps that automatically format your code and ensure
+it meets the enforced DTC code standards. These hooks will run automatically whenever you try to commit any code to the
+repository. The hooks only run on the code that you have staged for the commit, and any unstaged changed in your
+environment are temporarily stashed during the check.</p>
+<p>You may trigger the hooks manually, before committing, with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pre-commit
+</pre></div>
+</div>
+<p>Some of the hooks automatically format your code. If this happens, you will have to stage these changed files again and
+rerun the pre-commit hooks.</p>
+<p>In some cases, pre-commit hook failures cannot be fixed automatically and will require manual intervetion. Please refer
+to the error details in your console to understand what changes are necessary. Once applied, you will have to stage
+the changes before rerunning the pre-commit hooks.</p>
+<p>If you trigger the hooks with a <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span></code> command and any changes - automatic or manual - are necessary, your
+commit will not succeed. You must apply the necessary changes, stage them, and run <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span></code> again.</p>
+<p>There may be cases where you need to push code that does not pass these checks—for example, if you need to share broken code with a collaborator or the development team to help debug an issue. In such cases, you can bypass pre-commit checks using the –no-verify flag:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;Your commit message&quot;</span><span class="w"> </span>--no-verify
+</pre></div>
+</div>
+<p>Please use this with caution. If pre-commit is failing due to an unrelated issue, consider fixing the root cause or discussing it with the team before bypassing the checks.</p>
+</section>
+<section id="manage-dependencies-with-poetry">
+<h2>Manage dependencies with poetry<a class="headerlink" href="#manage-dependencies-with-poetry" title="Link to this heading"></a></h2>
+<p>Your Python repository depends on a set of libraries. You can see these inside the <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> file:</p>
+<ul class="simple">
+<li><p>under <code class="docutils literal notranslate"><span class="pre">[tool.poetry.group.dev.dependencies]</span></code>, where dependencies required only when developing the package are listed.
+These are typically libraries for formatting, linting, and testing the package.</p></li>
+<li><p>under <code class="docutils literal notranslate"><span class="pre">[tool.poetry.dependencies]</span></code>, where dependencies required to run the package are listed.</p></li>
+</ul>
+<p>We can modify these lists by running the following commands in the terminal:</p>
+<ul>
+<li><p>Add a dependency (use <code class="docutils literal notranslate"><span class="pre">[--group</span> <span class="pre">dev]</span></code> if it is a development-only dependency)</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>add<span class="w"> </span><span class="o">[</span>--group<span class="w"> </span>dev<span class="o">]</span><span class="w"> </span>&lt;dependency&gt;
+</pre></div>
+</div>
+</li>
+<li><p>Remove a dependency (use <code class="docutils literal notranslate"><span class="pre">[--group</span> <span class="pre">dev]</span></code> if it is a development-only dependency):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>remove<span class="w"> </span>&lt;dependency&gt;
+</pre></div>
+</div>
+</li>
+</ul>
+<p>Running these commands will update not only the <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>, but also the <code class="docutils literal notranslate"><span class="pre">poetry.lock</span></code>, which locks the example-dtc-repo
+version of dependencies and their sub-dependencies to ensure that the environment is reproducible.</p>
+<p>If you accidentally modify the pyproject.toml dependency details manually, or have a git conflict resulting from
+someone else adding a dependency in a separate branch to yours, you should run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>lock
+</pre></div>
+</div>
+<p>to ensure your <code class="docutils literal notranslate"><span class="pre">poetry.lock</span></code> correctly reflects the state of the <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> file once again.</p>
+</section>
+<section id="raise-a-pull-request">
+<h2>Raise a Pull Request<a class="headerlink" href="#raise-a-pull-request" title="Link to this heading"></a></h2>
+<p>A Pull Request (Merge Request in Gitlab) is a proposal to merge a set of changes from one branch to another. This allows
+one of your collaborators to review and discuss the changes before they get added to the main codebase.</p>
+<p>You must always raise a PR to merge your changes to the main branch - pushing straight to <code class="docutils literal notranslate"><span class="pre">main</span></code> is prohibited!</p>
+<p>To raise a Pull Request:</p>
+<ol class="arabic simple">
+<li><p>Ensure all your local changes are pushed to the remote branch.</p></li>
+<li><p>Navigate to the repository and click the <code class="docutils literal notranslate"><span class="pre">Pull</span> <span class="pre">Requests</span></code> tab.</p></li>
+<li><p>Click <code class="docutils literal notranslate"><span class="pre">New</span> <span class="pre">Pull</span> <span class="pre">Request</span></code>.</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">base</span></code> to main, and <code class="docutils literal notranslate"><span class="pre">compare</span></code> to your branch. An overview of your changes should appear.</p></li>
+<li><p>Click <code class="docutils literal notranslate"><span class="pre">Create</span> <span class="pre">pull</span> <span class="pre">request</span></code>.</p></li>
+<li><p>Add a meaningful title to the PR.</p></li>
+<li><p>Add a description: When you create a new PR, a template will automatically prepopulate the PR description with a structured format to guide you in providing relevant details. This helps reviewers understand the changes introduced by the PR. While using the template is not mandatory, it’s encouraged—feel free to remove or modify sections that aren’t relevant to your PR.</p></li>
+<li><p>To create a pull request that is ready for review, click <code class="docutils literal notranslate"><span class="pre">Create</span> <span class="pre">Pull</span> <span class="pre">Request</span></code>. To create a draft pull request, use
+the drop-down and select <code class="docutils literal notranslate"><span class="pre">Create</span> <span class="pre">Draft</span> <span class="pre">Pull</span> <span class="pre">Request</span></code>, then click <code class="docutils literal notranslate"><span class="pre">Draft</span> <span class="pre">Pull</span> <span class="pre">Request</span></code>.</p></li>
+</ol>
+<p><strong>Please raise small and frequent PRs (ideally &lt;200 lines modified) to make reviews easier!</strong></p>
+<p>By default, any raised PR will be assigned to the engineering team for review. You may add more reviewers if you would
+like e.g. a specific collaborator to review.</p>
+</section>
+<section id="versioning-and-releases">
+<h2>Versioning and releases<a class="headerlink" href="#versioning-and-releases" title="Link to this heading"></a></h2>
+<p>Versioning follows a simple model featuring three integers known as the major version, minor version and build number.
+For example, in package version <code class="docutils literal notranslate"><span class="pre">v3.5.7</span></code>, the major version is 3, the minor version is 5 and the build number is 7.</p>
+<ul class="simple">
+<li><p>The Major version should change when the package is entirely or almost entirely re-written.
+This should happen every few years for a well-maintained package.</p></li>
+<li><p>The Minor version should change when new user-facing functionality is added to the package.</p></li>
+<li><p>The Build number should change whenever a bug is fixed or a small tweak is made to the package.</p></li>
+</ul>
+<p>The build number of the DTC Python template package (and any package built from the template) is automatically increased
+when new code is merged to main (i.e. when a Pull Request is closed). We automatically tag the new version and generate
+a GitHub release for it.</p>
+<p>Whenever you make a change a change that warrants a minor or major version jump, you must:</p>
+<ul class="simple">
+<li><p>Determine the new version - if you are updating the minor version, the major should remain unchanged, and the build
+number should go back to 0 (e.g. <code class="docutils literal notranslate"><span class="pre">v1.0.54</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">v1.1.0</span></code>). If you are updating the major version, both the minor and
+the build should be decreased to 0 (e.g. <code class="docutils literal notranslate"><span class="pre">v1.1.43</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">v2.0.0</span></code>).</p></li>
+<li><p>Update the version in <code class="docutils literal notranslate"><span class="pre">[tool.poetry]</span></code> section of the <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> file.</p></li>
+<li><p>Add a line in <code class="docutils literal notranslate"><span class="pre">CHANGELOG.md</span></code> (at the top of the file, so that reading down the file has the reader moving backwards
+in time), updating the version number and describing what has been changed in the new major or minor version.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="code_standards.html" class="btn btn-neutral float-left" title="Meeting Code Standards" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright .</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

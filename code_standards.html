@@ -1,0 +1,232 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meeting Code Standards &mdash; DTC Ice Sheets Development Guide  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Development Workflow" href="development_workflow.html" />
+    <link rel="prev" title="Adapting the DTC template for your module" href="create_repository.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            DTC Ice Sheets Development Guide
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">How do I...:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="development_environment.html">Set up my environment?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="create_repository.html">Create my repository?</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Adhere to coding standards?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#pep8-code-style-guidelines">PEP8 Code Style Guidelines</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#type-hints">Type hints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#docstrings">Docstrings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#logging">Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#unit-testing-code-coverage">Unit Testing &amp; Code Coverage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="development_workflow.html">Contribute to the codebase?</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">DTC Ice Sheets Development Guide</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Meeting Code Standards</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/code_standards.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="meeting-code-standards">
+<h1>Meeting Code Standards<a class="headerlink" href="#meeting-code-standards" title="Link to this heading"></a></h1>
+<p>The DTC Python template is set up to enforce a set of code standards defined for this project. This section provides an
+overview of these standards as well as tips on how to adhere to them :)</p>
+<section id="pep8-code-style-guidelines">
+<h2>PEP8 Code Style Guidelines<a class="headerlink" href="#pep8-code-style-guidelines" title="Link to this heading"></a></h2>
+<p>The <a class="reference external" href="https://peps.python.org/pep-0008/">PEP8 Style Guide For Python Code</a> provides a comprehensive overview of
+widely accepted conventions in Python programming. It covers topics like proper indentation, use of whitespace, and
+variable/class/module naming conventions (please use meaningful names!).</p>
+<p>The DTC Python template’s pre-commit hooks automatically apply formatters to ensure your code adheres to many of these
+conventions by default.</p>
+</section>
+<section id="type-hints">
+<h2>Type hints<a class="headerlink" href="#type-hints" title="Link to this heading"></a></h2>
+<p>Type hints allow us to explicitly specify the type of a variable, function parameter, or function return value. This
+helps make the code more readable, provides useful information to linters and IDEs, and allows us to catch some bugs
+early on.</p>
+<p>We specify the type of a variable like so:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">x</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Alice&quot;</span>
+</pre></div>
+</div>
+<p>and define a function’s parameter and return type with:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+     <span class="k">return</span> <span class="s2">&quot;Hello, &quot;</span> <span class="o">+</span> <span class="n">name</span>
+</pre></div>
+</div>
+<p>Python’s <code class="docutils literal notranslate"><span class="pre">typing</span></code> module provides additional options such as <code class="docutils literal notranslate"><span class="pre">Any</span></code>, <code class="docutils literal notranslate"><span class="pre">Callable</span></code>, and <code class="docutils literal notranslate"><span class="pre">Optional</span></code> to annotate more
+complex data structures. If a function does not have a return statement, <code class="docutils literal notranslate"><span class="pre">-&gt;</span> <span class="pre">None:</span></code> should still be specified.</p>
+<p>All functions written as part of DTC must include type hints for both their input parameters and return types.
+Additionally, the typeguard library is used to validate these types at runtime during test executions, raising an
+error if a type mismatch is detected.</p>
+</section>
+<section id="docstrings">
+<h2>Docstrings<a class="headerlink" href="#docstrings" title="Link to this heading"></a></h2>
+<p>Docstrings are essential for documenting Python functions, classes, and modules. They provide a convenient way to
+describe the purpose, inputs, and outputs of your code, making it easier for others (and ourselves!) to understand and
+maintain. For consistency and clarity, we will use the NumPy style for docstrings.</p>
+<p>The NumPy style includes:</p>
+<ol class="arabic simple">
+<li><p>A brief description of the function’s purpose.</p></li>
+<li><p>Descriptions of each input parameter, including their type and purpose.</p></li>
+<li><p>A description of the return value, including its type and purpose.</p></li>
+</ol>
+<p>For example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">     </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">     Greet the user with a personalised message.</span>
+
+<span class="sd">     Parameters</span>
+<span class="sd">     ----------</span>
+<span class="sd">     name : str</span>
+<span class="sd">          The name of the person to greet.</span>
+
+<span class="sd">     Returns</span>
+<span class="sd">     -------</span>
+<span class="sd">     str</span>
+<span class="sd">          A greeting message.</span>
+<span class="sd">     &quot;&quot;&quot;</span>
+     <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Hello, </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">!&quot;</span>
+</pre></div>
+</div>
+<p>A correctly configured VSCode can quickly generate a docstring template for you. To do this, right-click below the
+function definition and select <code class="docutils literal notranslate"><span class="pre">Generate</span> <span class="pre">Docstring</span></code> in the dropdown. Make sure to use this feature after adding type
+hints to the function signature so they are automatically included in the template for you!</p>
+<p>In DTC, every Python file and every method must have a docstring.</p>
+</section>
+<section id="logging">
+<h2>Logging<a class="headerlink" href="#logging" title="Link to this heading"></a></h2>
+<p>Logging is essential for tracking the behaviour and performance of your module, especially once it is deployed. It
+allows us to record errors, warnings, or debugging details in a consistent and configurable way. Unlike <code class="docutils literal notranslate"><span class="pre">print</span></code>
+statements, logging provides more flexibility and can be easily directed to different outputs and filtered based on
+severity levels.</p>
+<p>The DTC Python template provides a core logging configuration for the entire package in <code class="docutils literal notranslate"><span class="pre">src/dtc_python_template/monitoring.py::setup_logging()</span></code>.
+This is run before any other package code (see <code class="docutils literal notranslate"><span class="pre">src/dtc_python_template/__main__.py</span></code>). This ensures that all logs
+follow a consistent format and are appropriately handled.</p>
+<p>Here is an example of how to define and use a logger in your Python file:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="c1"># Define the logger for the current module</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">important_function</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+     <span class="c1"># Use the logger for different levels of logging</span>
+     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;This is an info message&quot;</span><span class="p">)</span>
+     <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;This is a debug message&quot;</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">other_important_function</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+     <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;This is a warning message&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The above code creates a new logger object for the entire file, which is then used by the various functions within the
+file. By passing <code class="docutils literal notranslate"><span class="pre">__name__</span></code>, we ensure that the logger is correctly associated with the file’s name, making it easier
+to identify the source of the logs. Depending on the type of information we wish to convey, we use different log levels
+such as INFO, DEBUG, and WARNING to categorize messages based on their severity and importance.</p>
+<p>In DTC, we enforce the use of logging instead of <code class="docutils literal notranslate"><span class="pre">print</span></code> statements in the code.</p>
+</section>
+<section id="unit-testing-code-coverage">
+<h2>Unit Testing &amp; Code Coverage<a class="headerlink" href="#unit-testing-code-coverage" title="Link to this heading"></a></h2>
+<p>Unit testing is a critical part of the development process. It involves writing tests for individual units of code
+(usually functions or methods) to ensure they behave as expected. It is essential that unit tests are written as you
+develop your code to catch errors early and ensure that your code remains reliable as it evolves.</p>
+<p>Code coverage measures the percentage of lines of code executed by your unit tests. We require a minimum of 80% code
+coverage in DTC to ensure that a sufficient portion of your codebase is being tested. Code coverage is displayed
+whenever you run the <code class="docutils literal notranslate"><span class="pre">pytest</span></code> command in a correctly configured poetry environment.</p>
+<p>All unit tests should be placed in the <code class="docutils literal notranslate"><span class="pre">tests/</span></code> directory. The location and naming of the test files should mirror
+that of the files they are testing. For example, if your file is <code class="docutils literal notranslate"><span class="pre">src/dtc_python_template/example_subpackage/example_module_b.py</span></code>,
+the corresponding test file should be <code class="docutils literal notranslate"><span class="pre">tests/dtc_python_template/example_sub_package/test_example_module_b.py</span></code>.</p>
+<p>Unit tests often require <code class="docutils literal notranslate"><span class="pre">mocking</span></code> of complex objects or external dependencies, replacing them under test with
+controlled, simplified versions that simulate specific behaviors. Please see <a class="reference external" href="https://docs.python.org/3/library/unittest.mock.html">unittest.mock library</a>
+for more information.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="create_repository.html" class="btn btn-neutral float-left" title="Adapting the DTC template for your module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="development_workflow.html" class="btn btn-neutral float-right" title="Development Workflow" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright .</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
