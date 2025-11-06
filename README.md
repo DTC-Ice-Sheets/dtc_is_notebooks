@@ -1,5 +1,4 @@
 ![example workflow](https://github.com/dtc-ice-sheets/dtc_is_notebooks/actions/workflows/dtc_is_notebooks_test.yml/badge.svg)
-![example workflow](https://github.com/dtc-ice-sheets/dtc_is_notebooks/actions/workflows/dtc_is_notebooks_deploy.yml/badge.svg)
 
 # DTC Ice Sheets — Notebooks
 
