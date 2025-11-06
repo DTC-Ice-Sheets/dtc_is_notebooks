@@ -1,0 +1,80 @@
+# A reuseable generic pipeline for building a container (if necessary) for testing and deploying DTC Ice Sheets python packages
+name: generic_build_container_if_needed
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        description: 'The name of the package to build.'
+        required: true
+        type: string
+
+jobs:
+  build_container_if_necessary:
+    # Do we actually need to build the container at all?
+    # We build (or rebuild) the container if the package requirements change or it does not already exist.
+    runs-on: ubuntu-latest
+    container:
+      image: docker:27.4
+    defaults:
+      run:
+        # This needs to not use pipefail everywhere because failing intermediate lines
+        # are used to check whether to build the container or not.
+        shell: sh -l {0}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: '2'
+
+      - name: Generate hash of pyproject.toml, poetry.lock and Dockerfile
+        id: generate_hash
+        run: |
+          # Generate hashes for both files
+          TOML_HASH=$(sha256sum pyproject.toml | awk '{ print $1 }')
+          LOCK_HASH=$(sha256sum poetry.lock | awk '{ print $1 }')
+          DOCKERFILE_HASH=$(sha256sum .github/test_env_dockerfile | awk '{ print $1 }')
+
+          # Combine all hashes into one
+          CURRENT_HASH=$(echo "$TOML_HASH$LOCK_HASH$DOCKERFILE_HASH" | sha256sum | awk '{ print $1 }')
+
+          echo "CURRENT_HASH=$CURRENT_HASH" >> $GITHUB_ENV
+      - name: Login to OVH Registry
+        uses: docker/login-action@v3
+        with:
+          registry: 7sy3luly.c1.de1.container-registry.ovh.net
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Define container name
+        id: name_container
+        run: |
+          echo "image_name=7sy3luly.c1.de1.container-registry.ovh.net/dtc-ice-sheets/${{ inputs.package_name }}_$(echo "$GITHUB_REF_NAME" | awk '{print tolower($0)}')" >> $GITHUB_OUTPUT
+
+      - name: Check if image with tag matching the computed hash exists in registry
+        id: check_if_image_exists
+        run: |
+          docker manifest inspect "${{ steps.name_container.outputs.image_name }}:$CURRENT_HASH"
+          if docker manifest inspect "${{ steps.name_container.outputs.image_name }}:$CURRENT_HASH" > /dev/null 2>&1; then
+              echo "Exists"
+              echo "image_exists=true" >> $GITHUB_OUTPUT
+          else
+              echo "Does not exist"
+              echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Tag existing test image as latest
+        if:  ${{ steps.check_if_image_exists.outputs.image_exists == 'true'}}
+        run: |
+          docker pull "${{ steps.name_container.outputs.image_name }}:$CURRENT_HASH"
+          docker tag "${{ steps.name_container.outputs.image_name }}:$CURRENT_HASH" "${{ steps.name_container.outputs.image_name }}:latest"
+          docker push "${{ steps.name_container.outputs.image_name }}:latest"
+
+      - name: Build and push this package's test image
+        if:  ${{ steps.check_if_image_exists.outputs.image_exists == 'false'}}
+        run: |
+          docker build \
+            --cache-from ${{ steps.name_container.outputs.image_name }} \
+            --tag "${{ steps.name_container.outputs.image_name }}:$CURRENT_HASH" \
+            --tag "${{ steps.name_container.outputs.image_name }}:latest" -f .github/test_env_dockerfile .
+          docker push "${{ steps.name_container.outputs.image_name }}:$CURRENT_HASH"
+          docker push "${{ steps.name_container.outputs.image_name }}:latest"

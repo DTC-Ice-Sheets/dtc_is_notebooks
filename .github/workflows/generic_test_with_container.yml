@@ -1,0 +1,113 @@
+# A reuseable generic pipeline for testing a DTC Ice Sheets Python package
+name: generic_test_with_container
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        description: 'The name of the package to build.'
+        required: true
+        type: string
+      notebooks_allowed:
+        description: 'Whether or not Jupyter notebooks are permitted in the package.'
+        default: false
+        required: false
+        type: boolean
+      home_directories_allowed:
+        description: 'Whether or not hardcoded home directories are permitted in the package.'
+        default: false
+        required: false
+        type: boolean
+      file_size_limit_mb:
+        description: 'The CI chain will fail if there are any files present larger than this size in MB.'
+        default: 5
+        required: false
+        type: number
+
+jobs:
+  generate_container_name:
+    # work out which container to use for the remainder of the pipeline, based on the package and branch name
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+    defaults:
+      run:
+        shell: bash -leo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: specify
+        run: |
+          echo "image_name=7sy3luly.c1.de1.container-registry.ovh.net/dtc-ice-sheets/${{ inputs.package_name }}_$(echo "$GITHUB_REF_NAME" | awk '{print tolower($0)}')" >> $GITHUB_OUTPUT
+    outputs:
+      image_name: ${{ steps.specify.outputs.image_name }}
+
+  lint_and_test:
+    needs: generate_container_name
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.generate_container_name.outputs.image_name }}
+      credentials:
+        username: ${{ secrets.HARBOR_USERNAME }}
+        password: ${{ secrets.HARBOR_PASSWORD }}
+      options: --user root
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+        working-directory: /app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy checked out repo to /app
+        # Poetry determines whether to create a new venv or use an existing one based on the location of the package
+        # code in the file system. In the container Dockerfile, we already created a venv with this package's
+        # dependencies. We need to copy over the repository code into the Dockerfile WORKDIR (/app) so that the next
+        # step reuses the venv that already exists.
+        run: |
+          cp -r ${GITHUB_WORKSPACE}/. /app/
+
+      - name: Install package
+        # The Dockerfile installs only the package dependencies, not the package itself (allowing us to only rebuild the
+        # container if the dependencies change, rather than every time the package code changes). In the CI/CD, we copy
+        # repository code into the container and install just the package itself!
+        run: |
+          poetry install --only-root
+
+      - name: Enforce no jupyter notebooks allowed
+        if: ${{ ! inputs.notebooks_allowed }}
+        run: |
+          [[ ! $(find . -type f -name *.ipynb | grep .) ]]
+
+      - name: Enforce max noqa statement count
+        # an additional check against those trying to dodge the linter
+        run : |
+          test $(grep -r --exclude-dir=.venv . -e "noqa:" | wc -l) -le 100
+
+      - name: Enforce no hard-coded home directories
+        if: ${{ ! inputs.home_directories_allowed }}
+        run: |
+          [[ ! $(grep -r -e "/home/" --exclude-dir=.venv --include=\*.py --include=\*.ipynb .) ]]
+
+      - name: Enforce no large files
+        run: |
+          [[ $(find . -printf '%s %p\n'| grep -v .git | grep -v .venv | sort -nr | head -1 | awk '{print $1}') -le ${{ inputs.file_size_limit_mb }}*1024*1024 ]]
+
+      - name: Check linting
+        run: |
+          poetry run ruff check --config pyproject.toml
+
+      - name: Check docstrings
+        run: |
+          poetry run pydoclint --config pyproject.toml --quiet src/
+
+      - name: Check for security issues
+        run: |
+          poetry run bandit -r src --severity-level medium --confidence-level medium --quiet
+
+      - name: Run unit tests
+        run: |
+          poetry run pytest
+
+      - name: Check package can be built
+        run: |
+          poetry build

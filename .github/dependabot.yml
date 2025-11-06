@@ -1,0 +1,12 @@
+# Direct Dependabot to maintain dependencies for DTC Ice Sheets packages.
+version: 2
+updates:
+  # Enable package updates for pip
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      time: "02:00"
+      timezone: "Europe/Paris"
+    reviewers:
+      - "dtc-ice-sheets/engineering"

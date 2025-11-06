@@ -1,0 +1,57 @@
+default_language_version:
+  python: python3.12
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+        files: .*\.(py|yaml)$
+      - id: trailing-whitespace
+      - id: name-tests-test
+        args: ["--pytest-test-first"]
+
+# TODO: Remove this precommit hook once ruff fully supports pydoclint functionality:
+# https://github.com/astral-sh/ruff/issues/12434
+  - repo: https://github.com/jsh9/pydoclint
+    rev: 0.6.7
+    hooks:
+      - id: pydoclint
+        name: Check docstrings with pydoclint
+        args: ["--config=pyproject.toml", "--quiet"]
+        files: .*\.(py|ipynb)$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.9.9
+    hooks:
+      - id: ruff
+        name: Check linting with ruff
+        args: ["--config=pyproject.toml", "--fix"]
+        files: .*\.(py|ipynb)$
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        name: Check code security with bandit
+        args:
+          [
+            "-q",
+            "-c",
+            "pyproject.toml",
+            "--severity-level",
+            "medium",
+            "--confidence-level",
+            "medium",
+          ]
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: Run unit tests with pytest
+        entry: poetry run pytest
+        language: system
+        types: [python]
+        pass_filenames: false # run all tests, not just those that have been modified by the commit
+        always_run: true

@@ -1,0 +1,101 @@
+# A reuseable generic pipeline for testing a DTC Ice Sheets Python package
+name: generic_test
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        description: "The name of the package to build."
+        required: true
+        type: string
+      notebooks_allowed:
+        description: "Whether or not Jupyter notebooks are permitted in the package."
+        default: false
+        required: false
+        type: boolean
+      home_directories_allowed:
+        description: "Whether or not hardcoded home directories are permitted in the package."
+        default: false
+        required: false
+        type: boolean
+      file_size_limit_mb:
+        description: "The CI chain will fail if there are any files present larger than this size in MB."
+        default: 5
+        required: false
+        type: number
+
+jobs:
+  lint_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+
+      - name: Load cached venv
+        id: load-cached-poetry-venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-3.12-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Configure git authentication
+        run: |
+          git config --global url."https://${{ secrets.GH_ADMIN_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+
+      - name: Install dependencies
+        if: steps.load-cached-poetry-venv.outputs.cache-hit != 'true'
+        run: poetry install --with dev --no-root
+
+      - name: Install package
+        run: poetry install --with dev
+
+      - name: Enforce no jupyter notebooks allowed
+        if: ${{ ! inputs.notebooks_allowed }}
+        run: |
+          [[ ! $(find . -type f -name *.ipynb | grep .) ]]
+
+      - name: Enforce max noqa statement count
+        # an additional check against those trying to dodge the linter
+        run: |
+          test $(grep -r --exclude-dir=.venv . -e "noqa:" | wc -l) -le 100
+
+      - name: Enforce no hard-coded home directories
+        if: ${{ ! inputs.home_directories_allowed }}
+        run: |
+          [[ ! $(grep -r -e "/home/" --exclude-dir=.venv --include=\*.py --include=\*.ipynb .) ]]
+
+      - name: Enforce no large files
+        run: |
+          [[ $(find . -printf '%s %p\n'| grep -v .git | grep -v .venv | sort -nr | head -1 | awk '{print $1}') -le ${{ inputs.file_size_limit_mb }}*1024*1024 ]]
+
+      - name: Check linting
+        run: |
+          poetry run ruff check --config pyproject.toml
+
+      - name: Check docstrings
+        run: |
+          poetry run pydoclint --config pyproject.toml --quiet src/
+
+      - name: Check for security issues
+        run: |
+          poetry run bandit -r src --severity-level medium --confidence-level medium --quiet
+
+      - name: Run unit tests
+        run: |
+          poetry run pytest
+
+      - name: Check package can be built
+        run: |
+          poetry build

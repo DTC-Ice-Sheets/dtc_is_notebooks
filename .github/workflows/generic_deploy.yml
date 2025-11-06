@@ -1,0 +1,195 @@
+# A reuseable generic pipeline for deploying a DTC Ice Sheets package.
+name: generic_deploy
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        description: "The name of the package to build."
+        required: true
+        type: string
+
+jobs:
+  generate_container_name:
+    # work out which container to use for the remainder of the pipeline, based on the package and branch name
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - id: specify
+        run: |
+          echo "image_name=7sy3luly.c1.de1.container-registry.ovh.net/dtc-ice-sheets/${{ inputs.package_name }}_$(echo "$GITHUB_REF_NAME" | awk '{print tolower($0)}')" >> $GITHUB_OUTPUT
+    outputs:
+      image_name: ${{ steps.specify.outputs.image_name }}
+
+  deploy_package_and_cleanup:
+    needs: generate_container_name
+    # delete docker images that are no longer needed (notionally because we just merged the associated branch into main)
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.generate_container_name.outputs.image_name }}
+      credentials:
+        username: ${{ secrets.HARBOR_USERNAME }}
+        password: ${{ secrets.HARBOR_PASSWORD }}
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+        working-directory: /app
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Install dependencies not included in image
+        # Note we need to install git first or actions/checkout@v3 will use GitHub's REST API instead.
+        # TODO: swap this out for a better base container.
+        run: |
+          apt-get update
+          apt-get install -y git
+        # Bumping versions with github app token: https://github.com/orgs/community/discussions/25305
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.VERSION_BUMPER_APPID }}
+          private-key: ${{ secrets.VERSION_BUMPER_SECRET }}
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Copy checked out repo to /app
+        # Poetry determines whether to create a new venv or use an existing one based on the location of the package
+        # code in the file system. In the container Dockerfile, we already created a venv with this package's
+        # dependencies. We need to copy over the repository code into the Dockerfile WORKDIR (/app) so that the next
+        # step reuses the venv that already exists.
+        run: |
+          cp -r ${GITHUB_WORKSPACE}/. /app/
+
+      - name: Prepare repository for interaction
+        # we have to manually set the username and email before we can commit and push
+        # for some reason, actions/checkout pulls in tags attached to dangling commits, so we need to remove those too
+        # lastly, we set pull.rebase false to suppress a hint message and use the bot token to authenticate
+        # We use an app token to authenticate and thus bypass main branch protection.
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global user.name "ew-version-bumper[bot]"
+          git config --global user.email "200976665+ew-version-bumper[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          git config --global pull.rebase false
+          git tag -d $(git tag -l)
+          git fetch --tags
+
+      - name: Install package
+        # The Dockerfile installs only the package dependencies, not the package itself (allowing us to only rebuild the
+        # container if the dependencies change, rather than every time the package code changes). In the CI/CD, we copy
+        # repository code into the container and install just the package itself!
+        run: |
+          poetry install --only-root
+
+      - name: Build package
+        run: |
+          poetry build
+
+      - name: Upversion package if necessary and add git tag
+        id: push_tags
+        # The CI/CD will automatically increase the patch version when a PR is merged into main. Major and minor bumps
+        # should be performed manually by updating the package version in pyproject.toml. In order to avoid bumping the
+        # patch immediately following someone's manual bump (i.e. if someone has marked this as 1.0.0 in their PR, we do
+        # not want CI/CD to overwrite this as 1.0.1 on PR merge), we first check whether the version specified in
+        # pyproject.toml already exists within our git tags. If it does not, we tag as-is. If it does, we bump the patch
+        # version, commit the change, and tag.
+        # Additionally, we add "|| exit 1" to ensure that if the tag already exists, the build fails.
+        # The tag may already exist if there were two merges to main in rapid succession.
+        # This isn't a problem, as we'll simply deploy next time.
+        run: |
+          version=$(poetry version --short)
+          if [ $(git tag -l "$version") ]; then
+              poetry version patch
+              version=$(poetry version --short)
+              git commit -am "Bump version to $version"
+              git tag "$version" || exit 1
+              git push --tags
+              git push origin main
+          else
+              git tag "$version" || exit 1
+              git push --tags
+          fi
+          echo "full_version=$version" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          body: "This is an automatically generated build release.\nPlease view CHANGELOG.md for additional details."
+          tag_name: ${{ steps.push_tags.outputs.full_version }}
+
+      # deploys to public PyPI - keep commented out until package is ready to be published
+      # - name: Publish package to PyPI
+      #   run: |
+      #     poetry config pypi-token.pypi ${{ secrets.PYPI_API_TOKEN }}
+      #     poetry publish
+
+      - name: Build documentation
+        run: |
+          cd docs/
+          poetry run make html
+
+      - name: Deploy documentation to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GH_ADMIN_PAT }}
+          publish_dir: /app/docs/build/html # Path to the generated HTML files
+
+      - name: Delete old branches from the git repo
+        run: |
+          BRANCH_AGE_LIMIT_DAYS=45
+          PROTECTED_BRANCHES=("main" "master")
+
+          # Fetch and prune remote branches
+          echo "Fetching and pruning remote branches..."
+          git fetch --prune
+
+          echo "Retrieving branches which have been merged into main"
+          # Get a list of all remote branches (excluding HEAD)
+          all_branches=$(git branch -r --merged origin/main | grep -v "HEAD" | sed 's/origin\///')
+
+          # Loop through all branches
+          deleted_something=false
+          current_time=$(date +%s)  # Current time in seconds since epoch
+
+          for branch in $all_branches; do
+              # Skip protected branches
+              if [[ " ${PROTECTED_BRANCHES[@]} " =~ " ${branch} " ]]; then
+                  echo "Skipping protected branch: $branch"
+                  continue
+              fi
+
+              # Get the date of the last commit on the branch in epoch time
+              last_commit_date=$(git log -n 1 --pretty=format:"%ct" origin/"$branch")
+              if [[ -z "$last_commit_date" ]]; then
+                  echo "Failed to get commit date for branch: $branch. Skipping..."
+                  continue
+              fi
+
+              # Calculate the age of the branch in days
+              branch_age_days=$(( (current_time - last_commit_date) / 86400 ))
+
+              echo "Branch '$branch' last commit was $branch_age_days days ago."
+
+              # Check if branch exceeds the age limit
+              if [[ $branch_age_days -gt $BRANCH_AGE_LIMIT_DAYS ]]; then
+                  echo "Branch '$branch' is older than $BRANCH_AGE_LIMIT_DAYS days and will be deleted."
+                  git push origin --delete "$branch"
+                  echo "Deleted branch '$branch'."
+                  deleted_something=true
+              fi
+          done
+
+          if [[ "$deleted_something" == "false" ]]; then
+              echo "No branches were deleted."
+          else
+              echo "Branch cleanup completed."
+          fi

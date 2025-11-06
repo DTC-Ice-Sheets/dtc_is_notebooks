@@ -1,0 +1,29 @@
+{
+    "python.languageServer": "Pylance",
+    "ruff.enable": true,
+    "ruff.configuration": "pyproject.toml",
+    "editor.formatOnSave": true,
+    "files.autoSave": "afterDelay",
+    "editor.rulers": [
+        120
+    ],
+    "editor.tabSize": 4,
+    "autoDocstring.docstringFormat": "numpy",
+    "autoDocstring.startOnNewLine": true,
+    "files.associations": {
+        "*.py": "python",
+        "**/.vscode/*.json": "json"
+    },
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "--no-cov"
+    ],
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true
+    },
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.formatOnSave": true,
+    },
+}

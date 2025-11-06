@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-python.vscode-pylance",
+    "ms-python.python",
+    "ms-python.debugpy",
+    "ms-toolsai.jupyter",
+    "charliermarsh.ruff",
+    "njpwerner.autodocstring",
+    "tamasfe.even-better-toml"
+  ]
+}

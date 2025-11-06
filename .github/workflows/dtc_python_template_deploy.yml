@@ -1,0 +1,24 @@
+# When a version tag is pushed, deploy using that tag.
+# When adapting this template for your own use, please rename "dtc_python_template" to your package name.
+name: dtc_python_template_deploy
+
+on:
+  push:
+    branches:
+      - main  # only on main (and implicitly not tags)
+
+jobs:
+  build_container_if_needed:
+    if: github.actor != 'ew-version-bumper[bot]'
+    uses: ./.github/workflows/generic_build_container_if_needed.yml
+    with:
+      package_name: dtc_python_template
+    secrets: inherit
+
+  deploy:
+    if: github.actor != 'ew-version-bumper[bot]'
+    needs: build_container_if_needed
+    uses: ./.github/workflows/generic_deploy.yml
+    with:
+      package_name: dtc_python_template
+    secrets: inherit
