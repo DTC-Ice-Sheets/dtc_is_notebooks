@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "dtc_python_template"
-version = "0.0.55"
+version = "0.0.56"
 description = "Template repository for DTC Ice Sheets Python Packages."
 authors = ["Earthwave Ltd <info@earthwave.co.uk>"]
 license = "MIT"
