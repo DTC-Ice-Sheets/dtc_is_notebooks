@@ -50,10 +50,6 @@ jobs:
           path: .venv
           key: venv-3.12-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Configure git authentication
-        run: |
-          git config --global url."https://${{ secrets.GH_ADMIN_PAT }}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-
       - name: Install dependencies
         if: steps.load-cached-poetry-venv.outputs.cache-hit != 'true'
         run: poetry install --with dev --no-root
