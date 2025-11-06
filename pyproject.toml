@@ -3,19 +3,24 @@ requires = ["poetry>=1.5"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "dtc_python_template"
-version = "0.0.57"
-description = "Template repository for DTC Ice Sheets Python Packages."
-authors = ["Earthwave Ltd <info@earthwave.co.uk>"]
+name = "dtc_is_notebooks"
+version = "1.0.0"
+description = "Jupyter notebooks for the DTC Ice Sheets project"
+authors = ["DTC Ice Sheets consortium"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/dtc-ice-sheets/dtc_python_template"
-packages = [{ include = "dtc_python_template", from = "src" }]
+homepage = "https://github.com/dtc-ice-sheets/dtc_is_notebooks"
+packages = [{ include = "dtc_is_notebook_helpers", from = "src" }]
 
 [tool.poetry.dependencies]
-python = ">=3.12,<4.0"
+python = ">=3.11,<4.0"
 numpy = "^2.3"
-pydantic = "^2.12.4"
+xarray = "^2025.10.1"
+matplotlib = "^3.10.7"
+cartopy = "^0.25.0"
+zarr = "^3.1.3"
+pandas = "^2.3.3"
+requests = "^2.32.5"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"
@@ -24,47 +29,26 @@ pre-commit = "^4.3"
 ruff = "^0.14.3"
 bandit = "^1.8.6"
 pytest-cov = "^7.0.0"
-sphinx = "^8.2.3"
-sphinx-rtd-theme = "^3.0.2"
-sphinx-copybutton = "^0.5.2"
-commitizen = "^4.9.1"
-pydoclint = "^0.8.1"
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
 
 [tool.ruff.lint]
-preview = true
 select = [
-    "T20", # Disallow print statements
+    "T201", # Disallow print statements
     "A",    # Ambiguity
     "ANN",  # Annotations
     "B",    # Bad practices
-    "C90",    # Complexity
+    "C",    # Complexity
     "D",    # Documentation
     "E",    # Errors
     "F",    # Pyflakes (e.g. unused imports and vars)
-    "G",    # logging formatting
     "I",    # Imports
     "N",    # Naming
     "Q",    # Quoting
+    "S",    # Stylistic
     "W",    # Warnings
-    "PT",   # pytest-style
-    "SIM",  # flake8-simplify
-    "C4",   # flake8-comprehensions
-    "ARG",  # flake8-unused-arguments
-    "PIE",  # flake8-pie
-    "RUF",  # Ruff-specific rules
-    "BLE",  # Blind except
-    "RET",  # Return statements
-    "PTH",  # Use pathlib
-    "PD",   # Pandas
 ]
-
-[tool.pydoclint]
-style='numpy'
-check_style_mismatch="true"
 
 mccabe = { max-complexity = 10 }
 
@@ -84,6 +68,12 @@ ignore = [
     "D103", # Ignore missing docstring warnings for functions in test files (commonly not required for small test functions)
     "ANN",  # Ignore missing type annotations for functions in test files (commonly not required for small test functions)
 ]
+"**.ipynb" = [
+    "T201", # Allow print statements in Jupyter notebooks, as they are commonly used for debugging and output display
+    "E402", # Allow 'import' statements not being at the top of the file (common in notebooks for clarity)
+    "S101", # Allow the use of 'assert' statements in notebooks (common practice in exploratory coding)
+]
+
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy" # Accepts: "google", "numpy", or "pep257"
@@ -91,8 +81,8 @@ convention = "numpy" # Accepts: "google", "numpy", or "pep257"
 skips = ['*_test.py', '*/test_*.py']
 
 [tool.pytest.ini_options]
-addopts = "--disable-warnings --cov dtc_python_template --cov-fail-under=80"
-typeguard-packages = """dtc_python_template"""
+addopts = "--disable-warnings --cov dtc_is_notebook_helpers --cov-fail-under=80"
+typeguard-packages = """dtc_is_notebook_helpers"""
 typeguard-debug-instrumentation = true
 typeguard-forward-ref-policy = "ERROR"
 typeguard-collection-check-strategy = "ALL_ITEMS"

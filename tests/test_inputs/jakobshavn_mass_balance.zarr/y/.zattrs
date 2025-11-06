@@ -1,0 +1,11 @@
+{
+  "variable_name_override": "y",
+  "standard_name": "latitude",
+  "long_name": "latitude",
+  "units": "degrees_north",
+  "axis": "Y",
+  "grid_mapping": "spatial_ref",
+  "_ARRAY_DIMENSIONS": [
+    "point"
+  ]
+}

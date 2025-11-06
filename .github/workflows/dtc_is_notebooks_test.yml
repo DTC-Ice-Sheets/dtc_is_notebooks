@@ -1,0 +1,16 @@
+# When pushing to a branch, test
+# When adapting this template for your own use, please rename "dtc_is_notebooks" to your package name.
+name: dtc_is_notebooks_test
+
+on:
+  push:
+    branches-ignore:
+      - main # all branches except main (and implicitly not tags)
+
+jobs:
+  test:
+    uses: ./.github/workflows/generic_test.yml
+    with:
+      package_name: dtc_is_notebooks
+      notebooks_allowed: true
+    secrets: inherit

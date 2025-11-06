@@ -1,0 +1,10 @@
+{
+  "standard_name": "land_ice_surface_specific_mass_balance_flux",
+  "long_name": "Surface mass balance flux",
+  "units": "kg m-2 s-1",
+  "grid_mapping": "spatial_ref",
+  "_ARRAY_DIMENSIONS": [
+    "point",
+    "time"
+  ]
+}
