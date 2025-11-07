@@ -32,7 +32,7 @@ def test_get_precomputed_mass_balance_dataset_url_valid():
             assert result == "https://fake-url.com/precomputed"
             mock_get.assert_called_with(
                 f"https://query.dtc-ice-sheets.org/mass-balance/{dataset}",
-                timeout=600,
+                timeout=10,
                 headers=api_helpers.get_auth_headers(),
             )
 
