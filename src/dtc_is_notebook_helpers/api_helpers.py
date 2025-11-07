@@ -7,11 +7,13 @@ import time
 from datetime import datetime
 
 import requests
+import tenacity
 import xarray as xr
 
 DTC_QUERY_API_URL = "https://query.dtc-ice-sheets.org"
 
-API_TIMEOUT = 600  # seconds
+WORKFLOW_API_TIMEOUT = 600  # seconds
+GENERAL_API_TIMEOUT = 10  # seconds
 
 
 def get_auth_headers() -> dict:
@@ -47,7 +49,7 @@ def upload_mass_balance_csv(file_upload_value: dict) -> str:
     response = requests.post(
         f"{DTC_QUERY_API_URL}/mass-balance/upload-csv",  # adjust URL as needed
         files=files,
-        timeout=API_TIMEOUT,
+        timeout=WORKFLOW_API_TIMEOUT,
         headers=get_auth_headers(),
     )
 
@@ -56,6 +58,11 @@ def upload_mass_balance_csv(file_upload_value: dict) -> str:
     return response.json()["url"]
 
 
+@tenacity.retry(
+    wait=tenacity.wait_fixed(2),
+    stop=tenacity.stop_after_attempt(5),
+    retry=tenacity.retry_if_exception_type(requests.exceptions.RequestException),
+)
 def get_precomputed_mass_balance_dataset_url(dataset: str) -> str:
     """
     Handle loading the selected dataset and returns vmb, time_filtered_vmb, mb_str, and a status message.
@@ -77,9 +84,9 @@ def get_precomputed_mass_balance_dataset_url(dataset: str) -> str:
     """
     if dataset not in ["greenland", "antarctic", "greenland_and_antarctic"]:
         raise ValueError(f"Unknown dataset: {dataset}")
-    return requests.get(f"{DTC_QUERY_API_URL}/mass-balance/{dataset}", timeout=600, headers=get_auth_headers()).json()[
-        "url"
-    ]
+    return requests.get(
+        f"{DTC_QUERY_API_URL}/mass-balance/{dataset}", timeout=GENERAL_API_TIMEOUT, headers=get_auth_headers()
+    ).json()["url"]
 
 
 def run_selrem_module(
@@ -130,13 +137,15 @@ def run_selrem_module(
                 "analysis_mode": analysis_mode,
             }
         ),
-        timeout=API_TIMEOUT,
+        timeout=WORKFLOW_API_TIMEOUT,
     )
     resp.raise_for_status()
     job_id = resp.json()["job_id"]
     while True:
         time.sleep(2)
-        resp = requests.get(f"{DTC_QUERY_API_URL}/jobs/{job_id}", headers=get_auth_headers(), timeout=API_TIMEOUT)
+        resp = requests.get(
+            f"{DTC_QUERY_API_URL}/jobs/{job_id}", headers=get_auth_headers(), timeout=WORKFLOW_API_TIMEOUT
+        )
         resp.raise_for_status()
         res = resp.json()
         if res["status"] in ["Failed", "Error", "Cancelled", "Terminated"]:
