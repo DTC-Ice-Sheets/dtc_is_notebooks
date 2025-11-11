@@ -122,6 +122,7 @@ def plot_scaled_mean_mass_balance(
         _, axes = plt.subplots(1, 2, figsize=(16, 8), subplot_kw={"projection": ccrs.Orthographic(0, 90)})
         # GrIS
         ax_gris = axes[0]
+        ax_gris.projection = greenland_config["projection"]
         _plot_data_on_axis(
             ax_gris,
             greenland_config["extent"],
@@ -130,6 +131,8 @@ def plot_scaled_mean_mass_balance(
             mean_mb_ds_masked[mask_gris],
         )
         ax_gris.set_title("Greenland Ice Sheet", fontsize=12)
+
+        axes[1].projection = antarctica_config["projection"]
 
         _plot_data_on_axis(
             axes[1],
