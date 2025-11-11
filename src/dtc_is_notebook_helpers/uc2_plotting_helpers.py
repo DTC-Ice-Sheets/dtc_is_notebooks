@@ -107,11 +107,11 @@ def plot_scaled_mean_mass_balance(
     config = {
         "GrIS": {"projection": ccrs.Orthographic(0, 90), "extent": [-180, 180, 50, 90], "figsize": (8, 8)},
         "AIS": {"projection": ccrs.Orthographic(0, -90), "extent": [-180, 180, -90, -50], "figsize": (8, 8)},
-        "both": {"projection": ccrs.PlateCarree(), "extent": [-180, 180, -90, 90], "figsize": (16, 8)},
+        "AIS and GrIS": {"projection": ccrs.PlateCarree(), "extent": [-180, 180, -90, 90], "figsize": (16, 8)},
         "custom": {"projection": ccrs.Robinson(), "extent": [-180, 180, -90, 90], "figsize": (14, 7)},
     }
 
-    if dataset_value == "both":
+    if dataset_value == "AIS and GrIS":
         # Assume vmb contains both GrIS and AIS points, and you can distinguish them by latitude
         # (GrIS: lat > 0, AIS: lat < 0). Adjust if you have a better way to split.
         greenland_config = config["GrIS"]
