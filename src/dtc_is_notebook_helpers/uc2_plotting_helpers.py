@@ -114,7 +114,7 @@ def plot_scaled_mean_mass_balance(
     if dataset_value == "AIS and GrIS":
         # Assume vmb contains both GrIS and AIS points, and you can distinguish them by latitude
         # (GrIS: lat > 0, AIS: lat < 0). Adjust if you have a better way to split.
-        greenland_config = config["GrISMB"]
+        greenland_config = config["GrIS"]
         antarctica_config = config["AIS"]
         mask_gris = lat > 0
         mask_ais = lat < 0
