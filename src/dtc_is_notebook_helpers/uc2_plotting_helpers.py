@@ -111,7 +111,29 @@ def plot_scaled_mean_mass_balance(
         "custom": {"projection": ccrs.Robinson(), "extent": [-180, 180, -90, 90], "figsize": (14, 7)},
     }
 
-    if dataset_value == "AIS and GrIS":
+    def _resolve_dataset_config_key(dataset_name: str, latitudes: np.ndarray) -> str:
+        """Resolve plotting config from a known dataset key or infer it from latitude coverage."""
+        if dataset_name in config:
+            return dataset_name
+
+        valid_latitudes = latitudes[~np.isnan(latitudes)]
+        if valid_latitudes.size == 0:
+            return "custom"
+
+        has_north = np.any(valid_latitudes > 0)
+        has_south = np.any(valid_latitudes < 0)
+
+        if has_north and has_south:
+            return "AIS and GrIS"
+        if has_south:
+            return "AIS"
+        if has_north:
+            return "GrIS"
+        return "custom"
+
+    resolved_dataset_value = _resolve_dataset_config_key(dataset_value, lat)
+
+    if resolved_dataset_value == "AIS and GrIS":
         # Assume vmb contains both GrIS and AIS points, and you can distinguish them by latitude
         # (GrIS: lat > 0, AIS: lat < 0). Adjust if you have a better way to split.
         greenland_config = config["GrIS"]
@@ -156,7 +178,7 @@ def plot_scaled_mean_mass_balance(
         plt.suptitle(plot_description_str, fontsize=12, fontweight="bold", y=0.87)
         plt.show()
     else:
-        dataset_config = config[dataset_value]
+        dataset_config = config[resolved_dataset_value]
         _ = plt.figure(figsize=dataset_config["figsize"])
         ax = plt.axes(projection=dataset_config["projection"])
         _plot_data_on_axis(ax, dataset_config["extent"], lon, lat, mean_mb_ds_masked)
