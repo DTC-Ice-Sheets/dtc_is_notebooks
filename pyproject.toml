@@ -16,7 +16,7 @@ packages = [{ include = "dtc_is_notebook_helpers", from = "src" }]
 python = ">=3.11,<4.0"
 numpy = "^2.3"
 xarray = "^2025.10.1"
-matplotlib = "^3.10.7"
+matplotlib = "^3.10.8"
 cartopy = "^0.25.0"
 zarr = "^3.1.3"
 pandas = "^2.3.3"
