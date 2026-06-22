@@ -15,7 +15,7 @@ packages = [{ include = "dtc_is_notebook_helpers", from = "src" }]
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
 numpy = "^2.3"
-xarray = "^2025.10.1"
+xarray = "^2025.12.0"
 matplotlib = "^3.10.7"
 cartopy = "^0.25.0"
 zarr = "^3.1.3"
