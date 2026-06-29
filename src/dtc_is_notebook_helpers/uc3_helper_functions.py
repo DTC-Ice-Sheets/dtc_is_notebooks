@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import ipywidgets as widgets
+import pandas as pd
 import plotly.graph_objects as go
 import pytz
 import requests
@@ -184,6 +185,7 @@ async def display_datasets_and_variables(client: ApiClient) -> tuple[widgets.VBo
         for dataset in selected_datasets:
             dataset_variables = dataset_config[dataset]["variables"]
             variables.extend(dataset_variables)
+
         return variables
 
     dataset_widget = await dataset_selector(client=client)
@@ -343,7 +345,7 @@ def widget_credentials_make() -> widgets.Box:
             if credentials_box.value == "":
                 print("Please enter an API token before submitting.")
             else:
-                print(f"API token submitted: {credentials_box.value}")
+                print(f"API token submitted...")
 
                 client = authenticate_with_token(credentials_box.value)
 
@@ -436,8 +438,6 @@ async def build_covariate_analysis_input_selector(client: ApiClient) -> widgets.
     """
     ice_shelf_widget = await ice_shelf_selector(client=client)
     dataset_widget, variable_widget = await display_datasets_and_variables(client=client)
-    # dataset_widget = await dataset_selector(client=client)
-    # variable_widget = await variable_selector(client=client)
 
     input_selector_row1 = widgets.HBox([ice_shelf_widget, dataset_widget, variable_widget])
 
@@ -472,6 +472,43 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
     plot_data = r.json()
 
     return plot_data
+
+
+async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBox) -> dict:
+    variable_mapping = get_variables(input_selector)
+    results_output = {}
+    results = []
+    for variable in variable_mapping:
+        res = await StateAndFateApi(client).run_covariate_analysis(
+            ice_shelf_id=get_ice_shelf(input_selector),
+            covariate_analysis_request=CovariateAnalysisRequest(
+                start_time=get_time_range(input_selector)[0].replace(tzinfo=None),
+                end_time=get_time_range(input_selector)[1].replace(tzinfo=None),
+                variables=[variable],
+                analysis_type=CovariateAnalysisType("corr"),
+            ),
+        )
+
+        res = await wait_for_job(client=client, job_id=res.job_id)
+
+        output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
+        r = requests.get(output_url)
+        r.raise_for_status()
+        results.append(r.json())
+
+    for result_var in results:
+        # print(result_var)
+        # print("\n")
+        values = result_var["variables"][list(result_var["variables"].keys())[0]]["values"]
+        measurement_name = result_var["variables"][list(result_var["variables"].keys())[0]]["measurement_name"]
+        # print(measurement_name)
+        # print(values)
+        results_output[measurement_name] = pd.Series(
+            values,
+            name=measurement_name,
+        )
+
+    return results_output
 
 
 def customwrap(s: str, width: int = 16, separator: str = "<br>") -> str:
@@ -638,3 +675,51 @@ def plot_covariate_analysis(plot_data: dict, analysis_type: CovariateAnalysisTyp
         showlegend=False,
     )
     return fig
+
+
+def plot_timeseries_data(timeseries_data: dict) -> go.Figure:
+    """Create a time series plot for multiple variables.
+
+    Generate a line plot showing the time series data for each variable,
+    with appropriate labels and legends.
+
+    Parameters
+    ----------
+    timeseries_data : dict
+        Dictionary containing variable names and their corresponding time series values.
+
+    Returns
+    -------
+    go.Figure
+        Plotly figure with time series lines for each variable.
+    """
+    colors = qualitative.Plotly
+    fig = go.Figure()
+
+    for idx, (variable_name, values) in enumerate(timeseries_data.items()):
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(len(values))),
+                y=values,
+                mode="lines+markers",
+                name=variable_name,
+                line=dict(color=colors[idx % len(colors)]),
+            )
+        )
+
+    fig.update_layout(
+        xaxis_title="Time",
+        yaxis_title="Data Values",
+        height=600,
+        width=800,
+    )
+
+    return fig
+
+
+def convert_name_to_display_name(name):
+    return name.replace("_", " ").title()
+
+
+def convert_display_name_to_name(display_name):
+    return display_name.replace(" ", "_").lower()
