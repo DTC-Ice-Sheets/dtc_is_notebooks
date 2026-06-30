@@ -1676,6 +1676,26 @@ files = [
 ]
 
 [[package]]
+name = "ipydatetime"
+version = "1.2.0"
+description = "A Jupyter widgets library for time and datetime pickers"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "ipydatetime-1.2.0-py2.py3-none-any.whl", hash = "sha256:cd2ed4f4350d17223eb44c50fc0f7e90995e5930f0d0442379b224caddb6087e"},
+    {file = "ipydatetime-1.2.0.tar.gz", hash = "sha256:9b083e08efef140c29091fe114ea2921f88989e56f0b5eecdde9ac0157bb0b10"},
+]
+
+[package.dependencies]
+ipywidgets = ">=7.0.0"
+
+[package.extras]
+docs = ["nbsphinx (>=0.2.13)", "nbsphinx-link", "pypandoc", "pytz", "recommonmark", "sphinx (>=1.5)", "sphinx-rtd-theme"]
+examples = ["pytz"]
+test = ["coverage", "nbval", "pytest (>=3.6)", "pytest-check-links[cache]", "pytest-cov", "pytz"]
+
+[[package]]
 name = "ipykernel"
 version = "7.2.0"
 description = "IPython Kernel for Jupyter"
@@ -5197,4 +5217,4 @@ test = ["coverage (>=7.10)", "hypothesis", "mypy", "numpydoc", "packaging", "pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "67ac959eabf708e53388f0fb1a77f6e61ee69060778965d89e3daabe38d4b62b"
+content-hash = "cc1bd524ba4aaf79ec7fd431512553b7bc171a1dd91d584512ef2caf0bf9a74c"

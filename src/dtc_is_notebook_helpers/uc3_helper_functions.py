@@ -84,9 +84,7 @@ def update_client(b: LoadedButton) -> object:
 
 
 def _load_dataset_yaml() -> dict:
-    temp_path = Path(
-        "/home/palmerjohn/code/dtc_ice_sheets/dtc_is_notebooks/src/dtc_is_notebook_helpers/variable_mappings.yml"
-    )
+    temp_path = Path(__file__).parent / "variable_mappings.yml"
 
     with temp_path.open("r", encoding="utf-8") as f:
         config_dict = yaml.safe_load(f)
@@ -302,19 +300,15 @@ def time_range_selector() -> widgets.HBox:
 
     start_time_label = widgets.Label(value="Pick a start datetime:")
 
-    start_time_widget = widgets.DatetimePicker(
-        description="",
-        disabled=False,
-        min=min_date,
-        max=max_date,
-    )
+    start_time_widget = widgets.Text(value="", placeholder="YYYY-MM-DD HH:MM:SS", description="String:", disabled=False)
 
     end_time_label = widgets.Label(value="Pick an end datetime:")
 
-    end_time_widget = widgets.DatetimePicker(description="", disabled=False, min=min_date, max=max_date)
+    # end_time_widget = widgets.DatetimePicker(description="", disabled=False, min=min_date, max=max_date)
+    end_time_widget = widgets.Text(value="", placeholder="YYYY-MM-DD HH:MM:SS", description="String:", disabled=False)
 
-    start_time_widget.value = min_date
-    end_time_widget.value = max_date
+    start_time_widget.value = min_date.strftime("%Y-%m-%d %H:%M:%S")
+    end_time_widget.value = max_date.strftime("%Y-%m-%d %H:%M:%S")
 
     time_picker_container = [start_time_label, start_time_widget, end_time_label, end_time_widget]
 
@@ -345,7 +339,7 @@ def widget_credentials_make() -> widgets.Box:
             if credentials_box.value == "":
                 print("Please enter an API token before submitting.")
             else:
-                print(f"API token submitted...")
+                print("API token submitted...")
 
                 client = authenticate_with_token(credentials_box.value)
 
@@ -454,11 +448,12 @@ async def build_covariate_analysis_input_selector(client: ApiClient) -> widgets.
 
 async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.VBox) -> dict:
     variable_mapping = get_variables(input_selector)
+
     res = await StateAndFateApi(client).run_covariate_analysis(
         ice_shelf_id=get_ice_shelf(input_selector),
         covariate_analysis_request=CovariateAnalysisRequest(
-            start_time=get_time_range(input_selector)[0].replace(tzinfo=None),
-            end_time=get_time_range(input_selector)[1].replace(tzinfo=None),
+            start_time=datetime.strptime(get_time_range(input_selector)[0], "%Y-%m-%d %H:%M:%S"),
+            end_time=datetime.strptime(get_time_range(input_selector)[1], "%Y-%m-%d %H:%M:%S"),
             variables=variable_mapping,
             analysis_type=CovariateAnalysisType("corr"),
         ),
@@ -482,8 +477,8 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
         res = await StateAndFateApi(client).run_covariate_analysis(
             ice_shelf_id=get_ice_shelf(input_selector),
             covariate_analysis_request=CovariateAnalysisRequest(
-                start_time=get_time_range(input_selector)[0].replace(tzinfo=None),
-                end_time=get_time_range(input_selector)[1].replace(tzinfo=None),
+                start_time=datetime.strptime(get_time_range(input_selector)[0], "%Y-%m-%d %H:%M:%S"),
+                end_time=datetime.strptime(get_time_range(input_selector)[1], "%Y-%m-%d %H:%M:%S"),
                 variables=[variable],
                 analysis_type=CovariateAnalysisType("corr"),
             ),
