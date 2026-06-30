@@ -150,8 +150,7 @@ async def ice_shelf_selector(client: ApiClient) -> widgets.VBox:
             widgets.Label(value="Select Ice Shelf:"),
             widgets.Dropdown(
                 options=ice_shelves,
-                value=ice_shelves[0],
-                # description="Ice Shelf:",
+                value="thwaites",
                 disabled=False,
                 layout=widgets.Layout(width="90%"),
             ),
