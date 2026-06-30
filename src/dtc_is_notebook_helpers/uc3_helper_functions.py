@@ -445,7 +445,7 @@ async def build_covariate_analysis_input_selector(client: ApiClient) -> widgets.
     return input_selector
 
 
-def get_analysis_type(input_selector: widgets.VBox) -> CovariateAnalysisType:
+def _get_analysis_type(input_selector: widgets.VBox) -> CovariateAnalysisType:
     analysis_type_str = input_selector.children[1].children[0].children[1].value
     if analysis_type_str == "Correlation":
         return CovariateAnalysisType.CORR
@@ -460,7 +460,7 @@ def get_analysis_type(input_selector: widgets.VBox) -> CovariateAnalysisType:
 async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.VBox) -> dict:
     variable_mapping = get_variables(input_selector)
 
-    analysis_type = get_analysis_type(input_selector)
+    analysis_type = _get_analysis_type(input_selector)
     res = await StateAndFateApi(client).run_covariate_analysis(
         ice_shelf_id=get_ice_shelf(input_selector),
         covariate_analysis_request=CovariateAnalysisRequest(
