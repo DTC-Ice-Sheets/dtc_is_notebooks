@@ -445,16 +445,29 @@ async def build_covariate_analysis_input_selector(client: ApiClient) -> widgets.
     return input_selector
 
 
+def get_analysis_type(input_selector: widgets.VBox) -> CovariateAnalysisType:
+    analysis_type_str = input_selector.children[1].children[0].children[1].value
+    if analysis_type_str == "Correlation":
+        return CovariateAnalysisType.CORR
+    elif analysis_type_str == "Cross-Correlation":
+        return CovariateAnalysisType.CROSS_CORR
+    elif analysis_type_str == "Granger Causality":
+        return CovariateAnalysisType.CAUSAL
+    else:
+        raise ValueError(f"Unsupported analysis type: {analysis_type_str}")
+
+
 async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.VBox) -> dict:
     variable_mapping = get_variables(input_selector)
 
+    analysis_type = get_analysis_type(input_selector)
     res = await StateAndFateApi(client).run_covariate_analysis(
         ice_shelf_id=get_ice_shelf(input_selector),
         covariate_analysis_request=CovariateAnalysisRequest(
             start_time=datetime.strptime(get_time_range(input_selector)[0], "%Y-%m-%d %H:%M:%S"),
             end_time=datetime.strptime(get_time_range(input_selector)[1], "%Y-%m-%d %H:%M:%S"),
             variables=variable_mapping,
-            analysis_type=CovariateAnalysisType("corr"),
+            analysis_type=analysis_type,
         ),
     )
 
