@@ -92,7 +92,7 @@ def _load_dataset_yaml() -> dict:
 
 
 def _parse_datasets(dataset_config: dict) -> list[str]:
-    return list(dataset_config.keys())
+    return [_dataset_name_to_pretty_dataset_name(x) for x in dataset_config.keys()]
 
 
 def _dataset_names_to_pretty_dataset_names() -> dict:
@@ -113,6 +113,24 @@ def _pretty_dataset_name_to_dataset_name(pretty_name: str) -> str:
 def _dataset_name_to_pretty_dataset_name(dataset_name: str) -> str:
     mapping = _dataset_names_to_pretty_dataset_names()
     return mapping.get(dataset_name, None)
+
+
+def _var_names_to_pretty_var_names() -> dict:
+    dataset_config = _load_dataset_yaml()
+    var_mapping = {}
+    for dataset in dataset_config:
+        for variable in dataset_config[dataset]["variables"]:
+            var_mapping[variable] = dataset_config[dataset]["variables"][variable]["label"]
+    return var_mapping
+
+
+def _pretty_var_names_to_var_names() -> dict:
+    dataset_config = _load_dataset_yaml()
+    var_mapping = {}
+    for dataset in dataset_config:
+        for variable in dataset_config[dataset]["variables"]:
+            var_mapping[dataset_config[dataset]["variables"][variable]["label"]] = variable
+    return var_mapping
 
 
 async def get_ice_shelves(client: ApiClient) -> list[str]:
@@ -195,7 +213,9 @@ async def display_datasets_and_variables(client: ApiClient) -> tuple[widgets.VBo
     """
 
     def variable_update_on_button_clicked(button: widgets.Button) -> None:
-        variable_widget.children[1].options = _parse_variables(_load_dataset_yaml(), dataset_widget.children[1].value)
+        variable_widget.children[1].options = _parse_variables(
+            _load_dataset_yaml(), [_pretty_dataset_name_to_dataset_name(x) for x in dataset_widget.children[1].value]
+        )
 
     def _parse_variables(dataset_config: dict, selected_datasets: list[str]) -> list[str]:
         variables = []
@@ -416,6 +436,7 @@ def get_variables(input_selector: widgets.VBox) -> list[str]:
     variables = input_selector.children[0].children[2].children[1].value
     variable_mapping = []
     for dataset in datasets:
+        dataset = _pretty_dataset_name_to_dataset_name(dataset)
         variable_checks = {}
         for variable in variables:
             if variable in dataset_config[dataset]["variables"] and variable not in variable_checks:
