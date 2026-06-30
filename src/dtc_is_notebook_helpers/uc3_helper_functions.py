@@ -514,9 +514,7 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
     return results_output
 
 
-def customwrap(
-    s: str, width: int = 16, separator: str = "<br>", plot_height: int = 1200, plot_width: int = 1200
-) -> str:
+def customwrap(s: str, width: int = 16, separator: str = "<br>") -> str:
     """Wrap text to specified width with custom line separator.
 
     Break long strings into multiple lines at word boundaries, using a
@@ -539,7 +537,9 @@ def customwrap(
     return separator.join(textwrap.wrap(s, width=width))
 
 
-def plot_covariate_analysis(plot_data: dict, analysis_type: CovariateAnalysisType) -> go.Figure:
+def plot_covariate_analysis(
+    plot_data: dict, analysis_type: CovariateAnalysisType, plot_height: int = 1200, plot_width: int = 1200
+) -> go.Figure:
     """Create a matrix plot visualizing covariate relationships.
 
     Generate a comprehensive scatter plot matrix showing pairwise relationships
