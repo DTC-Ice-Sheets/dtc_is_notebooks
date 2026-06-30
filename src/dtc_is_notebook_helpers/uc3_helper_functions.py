@@ -496,14 +496,10 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
         r.raise_for_status()
         results.append(r.json())
 
-    for result_var in results:
-        # print(result_var)
-        # print("\n")
+    for i, result_var in enumerate(results):
         values = result_var["variables"][list(result_var["variables"].keys())[0]]["values"]
         measurement_name = result_var["variables"][list(result_var["variables"].keys())[0]]["measurement_name"]
-        # print(measurement_name)
-        # print(values)
-        results_output[measurement_name] = pd.Series(
+        results_output[measurement_name + f"_{i}"] = pd.Series(
             values,
             name=measurement_name,
         )
@@ -702,7 +698,7 @@ def plot_timeseries_data(timeseries_data: dict) -> go.Figure:
                 x=list(range(len(values))),
                 y=values,
                 mode="lines+markers",
-                name=variable_name,
+                name=variable_name.title(),
                 line=dict(color=colors[idx % len(colors)]),
             )
         )
@@ -711,7 +707,7 @@ def plot_timeseries_data(timeseries_data: dict) -> go.Figure:
         xaxis_title="Time",
         yaxis_title="Data Values",
         height=600,
-        width=800,
+        width=1100,
     )
 
     return fig
