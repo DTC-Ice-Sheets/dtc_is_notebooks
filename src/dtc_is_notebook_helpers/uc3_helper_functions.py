@@ -95,6 +95,26 @@ def _parse_datasets(dataset_config: dict) -> list[str]:
     return list(dataset_config.keys())
 
 
+def _dataset_names_to_pretty_dataset_names() -> dict:
+    dataset_config = _load_dataset_yaml()
+    return {dataset: dataset_config[dataset]["label"] for dataset in dataset_config}
+
+
+def _pretty_dataset_names_to_dataset_names() -> dict:
+    dataset_config = _load_dataset_yaml()
+    return {dataset_config[dataset]["label"]: dataset for dataset in dataset_config}
+
+
+def _pretty_dataset_name_to_dataset_name(pretty_name: str) -> str:
+    mapping = _pretty_dataset_names_to_dataset_names()
+    return mapping.get(pretty_name, None)
+
+
+def _dataset_name_to_pretty_dataset_name(dataset_name: str) -> str:
+    mapping = _dataset_names_to_pretty_dataset_names()
+    return mapping.get(dataset_name, None)
+
+
 async def get_ice_shelves(client: ApiClient) -> list[str]:
     """
     Fetch available ice shelf names.
@@ -504,10 +524,12 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
         results.append(r.json())
 
     for i, result_var in enumerate(results):
+        timestamps = result_var["variables"][list(result_var["variables"].keys())[0]]["timestamps"]
         values = result_var["variables"][list(result_var["variables"].keys())[0]]["values"]
         measurement_name = result_var["variables"][list(result_var["variables"].keys())[0]]["measurement_name"]
         results_output[measurement_name + f"_{i}"] = pd.Series(
             values,
+            index=pd.to_datetime(timestamps),
             name=measurement_name,
         )
 
@@ -704,7 +726,7 @@ def plot_timeseries_data(timeseries_data: dict) -> go.Figure:
     for idx, (variable_name, values) in enumerate(timeseries_data.items()):
         fig.add_trace(
             go.Scatter(
-                x=list(range(len(values))),
+                x=values.index,
                 y=values,
                 mode="lines+markers",
                 name=variable_name.title(),
