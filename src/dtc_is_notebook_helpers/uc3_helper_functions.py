@@ -1037,7 +1037,7 @@ def plot_timeseries_data(timeseries_data: dict, pretty_labels: bool = True) -> g
         xaxis_title="Time",
         yaxis_title="Data Values",
         height=600,
-        width=1100,
+        width=8000,
     )
 
     return fig
