@@ -84,6 +84,13 @@ def update_client(b: LoadedButton) -> object:
 
 
 def _load_dataset_yaml() -> dict:
+    """Load dataset and variable mappings from YAML configuration.
+
+    Returns
+    -------
+    dict
+        Parsed mapping configuration loaded from `variable_mappings.yml`.
+    """
     temp_path = Path(__file__).parent / "variable_mappings.yml"
 
     with temp_path.open("r", encoding="utf-8") as f:
@@ -92,30 +99,87 @@ def _load_dataset_yaml() -> dict:
 
 
 def _parse_datasets(dataset_config: dict) -> list[str]:
+    """Convert dataset identifiers to display labels.
+
+    Parameters
+    ----------
+    dataset_config : dict
+        Dataset mapping configuration keyed by dataset identifier.
+
+    Returns
+    -------
+    list[str]
+        Human-readable dataset labels.
+    """
     return [_dataset_name_to_pretty_dataset_name(x) for x in dataset_config.keys()]
 
 
 def _dataset_names_to_pretty_dataset_names() -> dict:
+    """Build a mapping from dataset identifiers to display labels.
+
+    Returns
+    -------
+    dict
+        Mapping from dataset name to dataset label.
+    """
     dataset_config = _load_dataset_yaml()
     return {dataset: dataset_config[dataset]["label"] for dataset in dataset_config}
 
 
 def _pretty_dataset_names_to_dataset_names() -> dict:
+    """Build a mapping from display labels to dataset identifiers.
+
+    Returns
+    -------
+    dict
+        Mapping from dataset label to dataset name.
+    """
     dataset_config = _load_dataset_yaml()
     return {dataset_config[dataset]["label"]: dataset for dataset in dataset_config}
 
 
 def _pretty_dataset_name_to_dataset_name(pretty_name: str) -> str:
+    """Resolve a dataset display label to its dataset identifier.
+
+    Parameters
+    ----------
+    pretty_name : str
+        Human-readable dataset label.
+
+    Returns
+    -------
+    str
+        Dataset identifier if found, otherwise ``None``.
+    """
     mapping = _pretty_dataset_names_to_dataset_names()
     return mapping.get(pretty_name, None)
 
 
 def _dataset_name_to_pretty_dataset_name(dataset_name: str) -> str:
+    """Resolve a dataset identifier to its display label.
+
+    Parameters
+    ----------
+    dataset_name : str
+        Dataset identifier used by the API.
+
+    Returns
+    -------
+    str
+        Human-readable dataset label if found, otherwise ``None``.
+    """
     mapping = _dataset_names_to_pretty_dataset_names()
     return mapping.get(dataset_name, None)
 
 
 def _var_names_to_pretty_var_names() -> dict:
+    """Build a mapping from variable identifiers to display labels.
+
+    Returns
+    -------
+    dict
+        Mapping from variable name to variable label.
+    """
     dataset_config = _load_dataset_yaml()
     var_mapping = {}
     for dataset in dataset_config:
@@ -125,12 +189,74 @@ def _var_names_to_pretty_var_names() -> dict:
 
 
 def _pretty_var_names_to_var_names() -> dict:
+    """Build a mapping from variable display labels to identifiers.
+
+    Returns
+    -------
+    dict
+        Mapping from variable label to variable name.
+    """
     dataset_config = _load_dataset_yaml()
     var_mapping = {}
     for dataset in dataset_config:
         for variable in dataset_config[dataset]["variables"]:
             var_mapping[dataset_config[dataset]["variables"][variable]["label"]] = variable
     return var_mapping
+
+
+def _var_name_to_pretty_var_name(var_name: str) -> str:
+    """Resolve a variable identifier to its display label.
+
+    Parameters
+    ----------
+    var_name : str
+        Variable identifier used by the API.
+
+    Returns
+    -------
+    str
+        Human-readable variable label if found, otherwise ``None``.
+    """
+    mapping = _var_names_to_pretty_var_names()
+    return mapping.get(var_name, None)
+
+
+def _pretty_var_name_to_var_name(pretty_name: str) -> str:
+    """Resolve a variable display label to its identifier.
+
+    Parameters
+    ----------
+    pretty_name : str
+        Human-readable variable label.
+
+    Returns
+    -------
+    str
+        Variable identifier if found, otherwise ``None``.
+    """
+    mapping = _pretty_var_names_to_var_names()
+    return mapping.get(pretty_name, None)
+
+
+def _var_name_units(var_name: str, dataset: str) -> str:
+    """Retrieve the units for a given variable identifier.
+
+    Parameters
+    ----------
+    var_name : str
+        Variable identifier used by the API.
+    dataset : str
+        Dataset identifier used by the API.
+
+    Returns
+    -------
+    str
+        Units string if found, otherwise ``None``.
+    """
+    dataset_config = _load_dataset_yaml()
+    if dataset in dataset_config and var_name in dataset_config[dataset]["variables"]:
+        return dataset_config[dataset]["variables"][var_name]["units"]
+    return None
 
 
 async def get_ice_shelves(client: ApiClient) -> list[str]:
@@ -213,11 +339,32 @@ async def display_datasets_and_variables(client: ApiClient) -> tuple[widgets.VBo
     """
 
     def variable_update_on_button_clicked(button: widgets.Button) -> None:
+        """Refresh variable options after dataset selection changes.
+
+        Parameters
+        ----------
+        button : widgets.Button
+            Button used to trigger variable list refresh.
+        """
         variable_widget.children[1].options = _parse_variables(
             _load_dataset_yaml(), [_pretty_dataset_name_to_dataset_name(x) for x in dataset_widget.children[1].value]
         )
 
     def _parse_variables(dataset_config: dict, selected_datasets: list[str]) -> list[str]:
+        """Collect variables available in selected datasets.
+
+        Parameters
+        ----------
+        dataset_config : dict
+            Dataset mapping configuration keyed by dataset identifier.
+        selected_datasets : list[str]
+            Dataset identifiers selected by the user.
+
+        Returns
+        -------
+        list[str]
+            Variable identifiers from all selected datasets.
+        """
         variables = []
         for dataset in selected_datasets:
             dataset_variables = dataset_config[dataset]["variables"]
@@ -332,19 +479,25 @@ def analysis_type_selector() -> widgets.ToggleButtons:
 
 
 def time_range_selector() -> widgets.HBox:
-    """Create a time range selection widget group."""
+    """Create a time range selection widget group.
+
+    Returns
+    -------
+    widgets.HBox
+        Container with start and end datetime text inputs.
+    """
     min_date = datetime(2010, 1, 1, tzinfo=pytz.UTC)
     max_date = datetime.now(pytz.UTC)
     max_date = datetime(max_date.year, max_date.month, max_date.day, tzinfo=pytz.UTC)
 
     start_time_label = widgets.Label(value="Pick a start datetime:")
 
-    start_time_widget = widgets.Text(value="", placeholder="YYYY-MM-DD HH:MM:SS", description="String:", disabled=False)
+    start_time_widget = widgets.Text(value="", placeholder="YYYY-MM-DD HH:MM:SS", disabled=False)
 
     end_time_label = widgets.Label(value="Pick an end datetime:")
 
     # end_time_widget = widgets.DatetimePicker(description="", disabled=False, min=min_date, max=max_date)
-    end_time_widget = widgets.Text(value="", placeholder="YYYY-MM-DD HH:MM:SS", description="String:", disabled=False)
+    end_time_widget = widgets.Text(value="", placeholder="YYYY-MM-DD HH:MM:SS", disabled=False)
 
     start_time_widget.value = min_date.strftime("%Y-%m-%d %H:%M:%S")
     end_time_widget.value = max_date.strftime("%Y-%m-%d %H:%M:%S")
@@ -409,28 +562,100 @@ def widget_credentials_make() -> widgets.Box:
 
 
 def get_client(credentials_container: widgets.Box) -> ApiClient:
+    """Extract an authenticated API client from the credentials widget.
+
+    Parameters
+    ----------
+    credentials_container : widgets.Box
+        Credential widget container returned by `widget_credentials_make`.
+
+    Returns
+    -------
+    ApiClient
+        Authenticated API client stored on the submit button.
+    """
     return credentials_container.children[1].value
 
 
 def get_ice_shelf(input_selector: widgets.VBox) -> str:
+    """Read the selected ice shelf identifier from the input widget.
+
+    Parameters
+    ----------
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    str
+        Selected ice shelf identifier.
+    """
     return input_selector.children[0].children[0].children[1].value
 
 
 def get_time_range(input_selector: widgets.VBox) -> tuple:
+    """Read selected start and end datetimes from the input widget.
+
+    Parameters
+    ----------
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    tuple
+        Start and end datetime strings in ``YYYY-MM-DD HH:MM:SS`` format.
+    """
     start_time = input_selector.children[2].children[0].children[1].value
     end_time = input_selector.children[2].children[0].children[3].value
     return start_time, end_time
 
 
 def get_analysis_type(input_selector: widgets.VBox) -> str:
+    """Read the selected analysis type label from the input widget.
+
+    Parameters
+    ----------
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    str
+        Selected analysis type label.
+    """
     return input_selector.children[1].children[0].children[1].value
 
 
 def get_input_datasets(input_selector: widgets.VBox) -> list[str]:
+    """Read selected dataset labels from the input widget.
+
+    Parameters
+    ----------
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    list[str]
+        Selected human-readable dataset labels.
+    """
     return input_selector.children[0].children[1].children[1].value
 
 
 def get_variables(input_selector: widgets.VBox) -> list[str]:
+    """Build selected variables as API request objects.
+
+    Parameters
+    ----------
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    list[str]
+        Selected variables represented as `VariableItem` objects.
+    """
     dataset_config = _load_dataset_yaml()
     datasets = get_input_datasets(input_selector)
     variables = input_selector.children[0].children[2].children[1].value
@@ -487,6 +712,23 @@ async def build_covariate_analysis_input_selector(client: ApiClient) -> widgets.
 
 
 def _get_analysis_type(input_selector: widgets.VBox) -> CovariateAnalysisType:
+    """Convert selected analysis label to API enum value.
+
+    Parameters
+    ----------
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    CovariateAnalysisType
+        Analysis type enum required by the API.
+
+    Raises
+    ------
+    ValueError
+        If the selected analysis label is unsupported.
+    """
     analysis_type_str = input_selector.children[1].children[0].children[1].value
     if analysis_type_str == "Correlation":
         return CovariateAnalysisType.CORR
@@ -499,6 +741,20 @@ def _get_analysis_type(input_selector: widgets.VBox) -> CovariateAnalysisType:
 
 
 async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.VBox) -> dict:
+    """Run covariate analysis and return plotting data.
+
+    Parameters
+    ----------
+    client : ApiClient
+        Authenticated API client.
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    dict
+        Parsed JSON payload containing covariate analysis results.
+    """
     variable_mapping = get_variables(input_selector)
 
     analysis_type = _get_analysis_type(input_selector)
@@ -523,6 +779,20 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
 
 
 async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBox) -> dict:
+    """Extract per-variable time series from covariate analysis responses.
+
+    Parameters
+    ----------
+    client : ApiClient
+        Authenticated API client.
+    input_selector : widgets.VBox
+        Input selector container built for covariate analysis.
+
+    Returns
+    -------
+    dict
+        Mapping of measurement names to pandas time series.
+    """
     variable_mapping = get_variables(input_selector)
     results_output = {}
     results = []
@@ -545,13 +815,17 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
         results.append(r.json())
 
     for i, result_var in enumerate(results):
+        dataset = variable_mapping[i].dataset
         timestamps = result_var["variables"][list(result_var["variables"].keys())[0]]["timestamps"]
         values = result_var["variables"][list(result_var["variables"].keys())[0]]["values"]
         measurement_name = result_var["variables"][list(result_var["variables"].keys())[0]]["measurement_name"]
-        results_output[measurement_name + f"_{i}"] = pd.Series(
-            values,
-            index=pd.to_datetime(timestamps),
-            name=measurement_name,
+        results_output[measurement_name + f"_{i}"] = (
+            pd.Series(
+                values,
+                index=pd.to_datetime(timestamps),
+                name=measurement_name,
+            ),
+            dataset,
         )
 
     return results_output
@@ -581,7 +855,7 @@ def customwrap(s: str, width: int = 16, separator: str = "<br>") -> str:
 
 
 def plot_covariate_analysis(
-    plot_data: dict, analysis_type: CovariateAnalysisType, plot_height: int = 1200, plot_width: int = 1200
+    plot_data: dict, analysis_type: CovariateAnalysisType, plot_height: int = 1000, plot_width: int = 1000
 ) -> go.Figure:
     """Create a matrix plot visualizing covariate relationships.
 
@@ -725,7 +999,7 @@ def plot_covariate_analysis(
     return fig
 
 
-def plot_timeseries_data(timeseries_data: dict) -> go.Figure:
+def plot_timeseries_data(timeseries_data: dict, pretty_labels: bool = True) -> go.Figure:
     """Create a time series plot for multiple variables.
 
     Generate a line plot showing the time series data for each variable,
@@ -745,12 +1019,16 @@ def plot_timeseries_data(timeseries_data: dict) -> go.Figure:
     fig = go.Figure()
 
     for idx, (variable_name, values) in enumerate(timeseries_data.items()):
+        units = _var_name_units("_".join(variable_name.split("_")[:-1]), dataset=values[1])
+        values = values[0]
         fig.add_trace(
             go.Scatter(
                 x=values.index,
                 y=values,
                 mode="lines+markers",
-                name=variable_name.title(),
+                name=_var_name_to_pretty_var_name("_".join(variable_name.split("_")[:-1])) + f" ({units})"
+                if pretty_labels is not None
+                else variable_name,
                 line=dict(color=colors[idx % len(colors)]),
             )
         )
@@ -763,11 +1041,3 @@ def plot_timeseries_data(timeseries_data: dict) -> go.Figure:
     )
 
     return fig
-
-
-def convert_name_to_display_name(name):
-    return name.replace("_", " ").title()
-
-
-def convert_display_name_to_name(display_name):
-    return display_name.replace(" ", "_").lower()

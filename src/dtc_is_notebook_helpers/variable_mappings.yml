@@ -263,70 +263,63 @@ POLAR_PLUS_ICE_SHELVES_MASS_BALANCE_COMPONENTS:
   region: "ice_shelf"
   variables:
     basal_melt_flux:
-      units: "m yr-1"
+      units: "Gt yr-1"
       timeseries_type: "derivative"
       measurement_uncertainties: "basal_melt_flux_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Basal Melt Flux"
       y_axis_label: "Basal Melt Flux"
     calving:
-      units: "m yr-1"
+      units: "Gt yr-1"
       timeseries_type: "derivative"
       measurement_uncertainties: "calving_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Calving"
       y_axis_label: "Calving"
     discharge:
-      units: "m yr-1"
+      units: "Gt yr-1"
       timeseries_type: "derivative"
       measurement_uncertainties: "discharge_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Discharge"
       y_axis_label: "Discharge"
-    mass_balance:
-      units: "m yr-1"
-      timeseries_type: "derivative"
-      measurement_uncertainties: "mass_balance_uncertainties"
-      measurement_uncertainty_type: "std"
-      label: "Mass Balance"
-      y_axis_label: "Mass Balance"
     surface_mass_balance:
-      units: "m yr-1"
+      units: "Gt yr-1"
       timeseries_type: "derivative"
       measurement_uncertainties: "surface_mass_balance_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Surface Mass Balance"
       y_axis_label: "Surface Mass Balance"
     cumulative_discharge_change:
-      units: "m yr-1"
+      units: "Gt"
       timeseries_type: "cummulative"
       measurement_uncertainties: "cumulative_discharge_change_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Cumulative Discharge Change"
       y_axis_label: "Cumulative Discharge Change"
     cumulative_surface_mass_balance_anomalies:
-      units: "m yr-1"
+      units: "Gt"
       timeseries_type: "cummulative"
       measurement_uncertainties: "cumulative_surface_mass_balance_anomalies_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Cumulative Surface Mass Balance Anomalies"
       y_axis_label: "Cumulative Surface Mass Balance Anomalies"
     cumulative_thinning:
-      units: "m yr-1"
+      units: "Gt"
       timeseries_type: "cummulative"
       measurement_uncertainties: "cumulative_thinning_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Cumulative Thinning"
       y_axis_label: "Cumulative Thinning"
     cumulative_retreat:
-      units: "m yr-1"
+      units: "Gt"
       timeseries_type: "cummulative"
       measurement_uncertainties: "cumulative_retreat_uncertainties"
       measurement_uncertainty_type: "std"
       label: "Cumulative Retreat"
       y_axis_label: "Cumulative Retreat"
     cumulative_mass_change:
-      units: "m yr-1"
+      units: "Gt"
       timeseries_type: "cummulative"
       measurement_uncertainties: "cumulative_mass_change_uncertainties"
       measurement_uncertainty_type: "std"
@@ -375,50 +368,50 @@ RACMO:
       y_axis_label: "Surface Mass Balance"
 
 
-REMA_MOSAIC_1000:
-  description: "The REMA v2 DEM at 1000m."
-  label: "REMA v2 Digital Elevation Maps (1000m)"
-  region: "ice_shelf"
-  variables:
-    height_above_wgs84_ellipsoid:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Height above WGS84 ellipsoid"
-      y_axis_label: "Height above WGS84 ellipsoid"
+# REMA_MOSAIC_1000:
+#   description: "The REMA v2 DEM at 1000m."
+#   label: "REMA v2 Digital Elevation Maps (1000m)"
+#   region: "ice_shelf"
+#   variables:
+#     height_above_wgs84_ellipsoid:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Height above WGS84 ellipsoid"
+#       y_axis_label: "Height above WGS84 ellipsoid"
 
-REMA_MOSAIC_100:
-  description: "The REMA v2 DEM at 100m."
-  label: "REMA v2 Digital Elevation Maps (100m)"
-  region: "ice_shelf"
-  variables:
-    height_above_wgs84_ellipsoid:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Height above WGS84 ellipsoid"
-      y_axis_label: "Height above WGS84 ellipsoid"
+# REMA_MOSAIC_100:
+#   description: "The REMA v2 DEM at 100m."
+#   label: "REMA v2 Digital Elevation Maps (100m)"
+#   region: "ice_shelf"
+#   variables:
+#     height_above_wgs84_ellipsoid:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Height above WGS84 ellipsoid"
+#       y_axis_label: "Height above WGS84 ellipsoid"
 
 
-REMA_GAPLESS_100:
-  description: "The REMA v2 DEM at 100m (gapless)."
-  label: "REMA v2 Digital Elevation Maps (100m gapless)"
-  region: "ice_shelf"
-  variables:
-    height_above_wgs84_ellipsoid:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Height above WGS84 ellipsoid"
-      y_axis_label: "Height above WGS84 ellipsoid"
+# REMA_GAPLESS_100:
+#   description: "The REMA v2 DEM at 100m (gapless)."
+#   label: "REMA v2 Digital Elevation Maps (100m gapless)"
+#   region: "ice_shelf"
+#   variables:
+#     height_above_wgs84_ellipsoid:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Height above WGS84 ellipsoid"
+#       y_axis_label: "Height above WGS84 ellipsoid"
 
 
 4D_ANTARCTICA_SUBGLACIAL_LAKES:
   description: "The 4D Antarctica Subglacial Lakes dataset."
-  label: "4D Antarctica Subglacial Lakes"
+  label: "4D Antarctica Subglacial Lakes - Thwaites only"
   region: "ice_shelf"
   variables:
     height_above_wgs84_ellipsoid:
@@ -445,106 +438,106 @@ REMA_GAPLESS_100:
 
 4D_ANTARCTICA_SURFACE_MELT_MAPS:
   description: "Daily Surface Melt Maps dataset."
-  label: "Surface Melt Maps"
+  label: "Daily Surface Melt Maps (Picard et al. 2006)"
   region: "ice_shelf"
   variables:
     melt:
-      units: ""
+      units: "#"
       timeseries_type: "derivative"
       measurement_uncertainties: null
       measurement_uncertainty_type: null
       label: "Surface Melt"
       y_axis_label: ""
     rawmelt:
-      units: ""
+      units: "#"
       timeseries_type: "derivative"
       measurement_uncertainties: null
       measurement_uncertainty_type: null
       label: "Surface Melt (raw)"
       y_axis_label: ""
 
-BAS_OCEAN_MOORINGS:
-  description: "In situ ocean moorings data."
-  label: "Ocean Moorings"
-  region: "ocean"
-  variables:
-    temperature:
-      units: "C"
-      timeseries_type: "derivative"
-      measurement_uncertainty_type: null
-      measurement_uncertainties: null
-      label: "Temperature"
-      y_axis_label: "Mooring Temp"
+# BAS_OCEAN_MOORINGS:
+#   description: "In situ ocean moorings data."
+#   label: "Ocean Moorings"
+#   region: "ocean"
+#   variables:
+#     temperature:
+#       units: "C"
+#       timeseries_type: "derivative"
+#       measurement_uncertainty_type: null
+#       measurement_uncertainties: null
+#       label: "Temperature"
+#       y_axis_label: "Mooring Temp"
 
-BED_MACHINE:
-  description: "The Bed Machine v3 dataset."
-  label: "Bed Machine v3"
-  region: "ice_shelf"
-  variables:
-    height_above_reference_geoid:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Height Above Reference Geoid"
-    reference_geoid:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Reference Geoid"
-    bed_topography_elevation:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: "bed_topography_elevation_uncertainty"
-      measurement_uncertainty_type: "std"
-      label: "Bed Topography Elevation"
-    firn_air_content:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Firn Air Content"
-    land_ice_thickness:
-      units: "m"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Land Ice Thickness"
-      y_axis_label: "Land Ice Thickness"
-
-
-SOUTHERN_ANNULAR_MODE:
-  description: "Southern Annular Mode Index."
-  label: "SAM Index"
-  region: "climate"
-  variables:
-    souther_annular_mode_index:
-      units: "#"
-      timeseries_type: "derivative"
-      measurement_uncertainty_type: null
-      measurement_uncertainties: null
-      label: "Temperature"
-      y_axis_label: "SAM Index"
+# BED_MACHINE:
+#   description: "The Bed Machine v3 dataset."
+#   label: "Bed Machine v3"
+#   region: "ice_shelf"
+#   variables:
+#     height_above_reference_geoid:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Height Above Reference Geoid"
+#     reference_geoid:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Reference Geoid"
+#     bed_topography_elevation:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: "bed_topography_elevation_uncertainty"
+#       measurement_uncertainty_type: "std"
+#       label: "Bed Topography Elevation"
+#     firn_air_content:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Firn Air Content"
+#     land_ice_thickness:
+#       units: "m"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Land Ice Thickness"
+#       y_axis_label: "Land Ice Thickness"
 
 
-ANTARCTIC_OSCILLATION:
-  description: "Antarctic Oscillation Index."
-  label: "AAO Index"
-  region: "climate"
-  variables:
-    antarctic_oscillation_index:
-      units: "#"
-      timeseries_type: "derivative"
-      measurement_uncertainty_type: null
-      measurement_uncertainties: null
-      label: "Temperature"
-      y_axis_label: "AAO Index"
+# SOUTHERN_ANNULAR_MODE:
+#   description: "Southern Annular Mode Index."
+#   label: "SAM Index"
+#   region: "climate"
+#   variables:
+#     souther_annular_mode_index:
+#       units: "#"
+#       timeseries_type: "derivative"
+#       measurement_uncertainty_type: null
+#       measurement_uncertainties: null
+#       label: "Temperature"
+#       y_axis_label: "SAM Index"
+
+
+# ANTARCTIC_OSCILLATION:
+#   description: "Antarctic Oscillation Index."
+#   label: "AAO Index"
+#   region: "climate"
+#   variables:
+#     antarctic_oscillation_index:
+#       units: "#"
+#       timeseries_type: "derivative"
+#       measurement_uncertainty_type: null
+#       measurement_uncertainties: null
+#       label: "Temperature"
+#       y_axis_label: "AAO Index"
 
 
 moorings:
   description: "Processed time series from the Thwaites paper."
-  label: "Ocean Moorings (Gourmelen et al. 2025)"
+  label: "Ocean Moorings (Gourmelen et al. 2025) - Thwaites only"
   region: "ocean"
   variables:
     0_8_degree_c_isotherm_depth:
@@ -557,7 +550,7 @@ moorings:
 
 basal_melt_anomalies_pine_island:
   description: "Processed time series from the Thwaites paper."
-  label: "Basal Melt Anomalies - Pine Island (Gourmelen et al. 2025)"
+  label: "Basal Melt Anomalies - Pine Island (Gourmelen et al. 2025) - Thwaites only"
   region: "ocean"
   variables:
     basal_melt_anomalies:
@@ -570,7 +563,7 @@ basal_melt_anomalies_pine_island:
 
 subglacial_lake_discharge:
   description: "Processed time series from the Thwaites paper."
-  label: "Subglacial Lake Discharge (Gourmelen et al. 2025)"
+  label: "Subglacial Lake Discharge (Gourmelen et al. 2025) - Thwaites only"
   region: "ocean"
   variables:
     lake_discharge:
@@ -583,7 +576,7 @@ subglacial_lake_discharge:
 
 basal_melt_anomalies_thwaites:
   description: "Processed time series from the Thwaites paper."
-  label: "Basal Melt Anomalies - Thwaites (Gourmelen et al. 2025)"
+  label: "Basal Melt Anomalies - Thwaites (Gourmelen et al. 2025) - Thwaites only"
   region: "ocean"
   variables:
     basal_melt_anomalies:
