@@ -426,7 +426,7 @@ REMA_GAPLESS_100:
 
 4D_ANTARCTICA_SURFACE_MELT_MAPS:
   description: "Daily Surface Melt Maps dataset."
-  label: "Daily Surface Melt Maps (Picard et al. 2006)"
+  label: "Daily Surface Melt Maps"
   region: "ice_shelf"
   variables:
     melt:
@@ -522,7 +522,7 @@ ANTARCTIC_OSCILLATION:
 
 moorings:
   description: "Processed time series from the Thwaites paper."
-  label: "Ocean Moorings (Gourmelen et al. 2025) - Thwaites only"
+  label: "Ocean Moorings (Gourmelen et al. 2025)"
   region: "ocean"
   variables:
     0_8_degree_c_isotherm_depth:
@@ -535,7 +535,7 @@ moorings:
 
 basal_melt_anomalies_pine_island:
   description: "Processed time series from the Thwaites paper."
-  label: "Basal Melt Anomalies - Pine Island (Gourmelen et al. 2025) - Thwaites only"
+  label: "Basal Melt Anomalies - Pine Island (Gourmelen et al. 2025)"
   region: "ocean"
   variables:
     basal_melt_anomalies:
@@ -548,7 +548,7 @@ basal_melt_anomalies_pine_island:
 
 subglacial_lake_discharge:
   description: "Processed time series from the Thwaites paper."
-  label: "Subglacial Lake Discharge (Gourmelen et al. 2025) - Thwaites only"
+  label: "Subglacial Lake Discharge (Gourmelen et al. 2025)"
   region: "ocean"
   variables:
     lake_discharge:
@@ -561,7 +561,7 @@ subglacial_lake_discharge:
 
 basal_melt_anomalies_thwaites:
   description: "Processed time series from the Thwaites paper."
-  label: "Basal Melt Anomalies - Thwaites (Gourmelen et al. 2025) - Thwaites only"
+  label: "Basal Melt Anomalies - Thwaites (Gourmelen et al. 2025)
   region: "ocean"
   variables:
     basal_melt_anomalies:
