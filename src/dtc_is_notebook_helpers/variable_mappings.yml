@@ -341,18 +341,18 @@ POLAR_PLUS_ICE_SHELVES_BASAL_MELT_TIMESERIES:
       y_axis_label: "Basal Melt Timeseries"
 
 
-POLAR_PLUS_ICE_SHELVES_CALVING_FRONT:
-  description: "Calving front maps from the Polar+ Ice Shelves project."
-  label: "Polar+ Ice Shelves Calving Front"
-  region: "ice_shelf"
-  variables:
-    coastline:
-      units: "#"
-      timeseries_type: "derivative"
-      measurement_uncertainties: null
-      measurement_uncertainty_type: null
-      label: "Calving Front Maps"
-      y_axis_label: "Calving Front Maps"
+# POLAR_PLUS_ICE_SHELVES_CALVING_FRONT:
+#   description: "Calving front maps from the Polar+ Ice Shelves project."
+#   label: "Polar+ Ice Shelves Calving Front"
+#   region: "ice_shelf"
+#   variables:
+#     coastline:
+#       units: "#"
+#       timeseries_type: "derivative"
+#       measurement_uncertainties: null
+#       measurement_uncertainty_type: null
+#       label: "Calving Front Maps"
+#       y_axis_label: "Calving Front Maps"
 
 RACMO:
   description: "The RACMO SMB variable."
