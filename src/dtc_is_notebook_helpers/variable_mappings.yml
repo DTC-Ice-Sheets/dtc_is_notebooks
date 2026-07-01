@@ -554,7 +554,7 @@ basal_melt_anomalies_pine_island:
   region: "ocean"
   variables:
     basal_melt_anomalies:
-        units: "m yr-1"
+        units: "m"
         timeseries_type: "derivative"
         measurement_uncertainties: "basal_melt_anomalies_uncertainties"
         measurement_uncertainty_type: std
@@ -580,7 +580,7 @@ basal_melt_anomalies_thwaites:
   region: "ocean"
   variables:
     basal_melt_anomalies:
-      units: "m yr-1"
+      units: "m"
       timeseries_type: "derivative"
       measurement_uncertainties: "basal_melt_anomalies_uncertainties"
       measurement_uncertainty_type: std

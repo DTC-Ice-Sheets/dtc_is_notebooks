@@ -542,7 +542,7 @@ def widget_credentials_make() -> widgets.Box:
         placeholder="Enter your API token here...",
         description="API token:",
         disabled=False,
-        layout=widgets.Layout(width="50%"),
+        layout=widgets.Layout(width="25%"),
     )
 
     credentials_button = LoadedButton(
