@@ -507,32 +507,32 @@ RACMO:
 #       y_axis_label: "Land Ice Thickness"
 
 
-# SOUTHERN_ANNULAR_MODE:
-#   description: "Southern Annular Mode Index."
-#   label: "SAM Index"
-#   region: "climate"
-#   variables:
-#     souther_annular_mode_index:
-#       units: "#"
-#       timeseries_type: "derivative"
-#       measurement_uncertainty_type: null
-#       measurement_uncertainties: null
-#       label: "Temperature"
-#       y_axis_label: "SAM Index"
+SOUTHERN_ANNULAR_MODE:
+  description: "Southern Annular Mode Index."
+  label: "SAM Index"
+  region: "antarctic_wide"
+  variables:
+    souther_annular_mode_index:
+      units: "#"
+      timeseries_type: "derivative"
+      measurement_uncertainty_type: null
+      measurement_uncertainties: null
+      label: "Temperature"
+      y_axis_label: "SAM Index"
 
 
-# ANTARCTIC_OSCILLATION:
-#   description: "Antarctic Oscillation Index."
-#   label: "AAO Index"
-#   region: "climate"
-#   variables:
-#     antarctic_oscillation_index:
-#       units: "#"
-#       timeseries_type: "derivative"
-#       measurement_uncertainty_type: null
-#       measurement_uncertainties: null
-#       label: "Temperature"
-#       y_axis_label: "AAO Index"
+ANTARCTIC_OSCILLATION:
+  description: "Antarctic Oscillation Index."
+  label: "AAO Index"
+  region: "antarctic_wide"
+  variables:
+    antarctic_oscillation_index:
+      units: "#"
+      timeseries_type: "derivative"
+      measurement_uncertainty_type: null
+      measurement_uncertainties: null
+      label: "Temperature"
+      y_axis_label: "AAO Index"
 
 
 moorings:
