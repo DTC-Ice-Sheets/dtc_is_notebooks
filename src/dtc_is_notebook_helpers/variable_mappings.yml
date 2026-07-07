@@ -510,9 +510,9 @@ RACMO:
 SOUTHERN_ANNULAR_MODE:
   description: "Southern Annular Mode Index."
   label: "SAM Index"
-  region: "antarctic_wide"
+  region: "antarctica_wide"
   variables:
-    souther_annular_mode_index:
+    southern_annular_mode_index:
       units: "#"
       timeseries_type: "derivative"
       measurement_uncertainty_type: null
@@ -524,7 +524,7 @@ SOUTHERN_ANNULAR_MODE:
 ANTARCTIC_OSCILLATION:
   description: "Antarctic Oscillation Index."
   label: "AAO Index"
-  region: "antarctic_wide"
+  region: "antarctica_wide"
   variables:
     antarctic_oscillation_index:
       units: "#"
