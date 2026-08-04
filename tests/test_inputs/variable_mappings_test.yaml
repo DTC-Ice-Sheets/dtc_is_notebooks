@@ -1,0 +1,25 @@
+TEST_DATASET_1:
+  description: "Test dataset for _load_dataset_yaml"
+  label: "Test Dataset 1"
+  region: "ice_shelf"
+  variables:
+    test_variable_1:
+      units: "m"
+      timeseries_type: "derivative"
+      measurement_uncertainties: null
+      measurement_uncertainty_type: null
+      label: "Test Variable 1"
+      y_axis_label: "Test Variable 1"
+
+TEST_DATASET_2:
+  description: "Test dataset for _load_dataset_yaml"
+  label: "Test Dataset 2"
+  region: "ice_shelf"
+  variables:
+    test_variable_2:
+      units: "m"
+      timeseries_type: "derivative"
+      measurement_uncertainties: null
+      measurement_uncertainty_type: null
+      label: "Test Variable 2"
+      y_axis_label: "Test Variable 2"

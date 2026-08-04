@@ -188,22 +188,6 @@ def _var_names_to_pretty_var_names() -> dict:
     return var_mapping
 
 
-def _pretty_var_names_to_var_names() -> dict:
-    """Build a mapping from variable display labels to identifiers.
-
-    Returns
-    -------
-    dict
-        Mapping from variable label to variable name.
-    """
-    dataset_config = _load_dataset_yaml()
-    var_mapping = {}
-    for dataset in dataset_config:
-        for variable in dataset_config[dataset]["variables"]:
-            var_mapping[dataset_config[dataset]["variables"][variable]["label"]] = variable
-    return var_mapping
-
-
 def _var_name_to_pretty_var_name(var_name: str) -> str:
     """Resolve a variable identifier to its display label.
 
@@ -219,23 +203,6 @@ def _var_name_to_pretty_var_name(var_name: str) -> str:
     """
     mapping = _var_names_to_pretty_var_names()
     return mapping.get(var_name, None)
-
-
-def _pretty_var_name_to_var_name(pretty_name: str) -> str:
-    """Resolve a variable display label to its identifier.
-
-    Parameters
-    ----------
-    pretty_name : str
-        Human-readable variable label.
-
-    Returns
-    -------
-    str
-        Variable identifier if found, otherwise ``None``.
-    """
-    mapping = _pretty_var_names_to_var_names()
-    return mapping.get(pretty_name, None)
 
 
 def _var_name_units(var_name: str, dataset: str) -> str:
@@ -529,9 +496,9 @@ def widget_credentials_make() -> widgets.Box:
         with credentials_output:
             credentials_output.clear_output()
             if credentials_box.value == "":
-                print("Please enter an API token before submitting.")
+                print("Please enter an API token before submitting.")  # noqa: T201
             else:
-                print("API token submitted...")
+                print("API token submitted...")  # noqa: T201
 
                 client = authenticate_with_token(credentials_box.value)
 
@@ -557,7 +524,7 @@ def widget_credentials_make() -> widgets.Box:
     credentials_button.on_click(on_button_clicked)
 
     credentials_container = [credentials_box, credentials_button, credentials_output]
-    display(widgets.Box(credentials_container))
+    display(widgets.Box(credentials_container))  # noqa: F821
     return widgets.Box(credentials_container)
 
 
@@ -706,7 +673,7 @@ async def build_covariate_analysis_input_selector(client: ApiClient) -> widgets.
 
     input_selector = widgets.VBox([input_selector_row1, input_selector_row2, input_selector_row3])
 
-    display(input_selector)
+    display(input_selector)  # noqa: F821
 
     return input_selector
 
@@ -771,7 +738,7 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
     res = await wait_for_job(client=client, job_id=res.job_id)
 
     output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
-    r = requests.get(output_url)
+    r = requests.get(output_url)  # noqa: S113
     r.raise_for_status()
     plot_data = r.json()
 
@@ -810,7 +777,7 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
         res = await wait_for_job(client=client, job_id=res.job_id)
 
         output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
-        r = requests.get(output_url)
+        r = requests.get(output_url)  # noqa: S113
         r.raise_for_status()
         results.append(r.json())
 
@@ -1029,7 +996,7 @@ def plot_timeseries_data(timeseries_data: dict, pretty_labels: bool = True) -> g
                 name=_var_name_to_pretty_var_name("_".join(variable_name.split("_")[:-1])) + f" ({units})"
                 if pretty_labels is not None
                 else variable_name,
-                line=dict(color=colors[idx % len(colors)]),
+                line={"color": colors[idx % len(colors)]},
             )
         )
 
