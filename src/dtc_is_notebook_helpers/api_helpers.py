@@ -18,7 +18,7 @@ GENERAL_API_TIMEOUT = 10  # seconds
 
 def get_auth_headers() -> dict:
     """Get authentication headers for DTC Query API requests."""
-    return {"Authorization": f"Bearer {os.environ['DTC_API_PASSWORD']}"}
+    return {"Authorization": f"Bearer {os.environ['DTC_API_TOKEN']}"}
 
 
 def upload_mass_balance_csv(file_upload_value: dict) -> str:

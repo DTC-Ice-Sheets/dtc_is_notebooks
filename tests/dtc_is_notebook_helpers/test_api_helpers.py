@@ -19,7 +19,7 @@ def mock_file_content() -> bytes:
 
 def test_get_precomputed_mass_balance_dataset_url_valid():
     with (
-        patch.object(api_helpers.os, "environ", {"DTC_API_PASSWORD": "fake_password"}),
+        patch.object(api_helpers.os, "environ", {"DTC_API_TOKEN": "fake_token"}),
         patch.object(api_helpers.requests, "get") as mock_get,
     ):
         mock_response = MagicMock()
@@ -44,7 +44,7 @@ def test_get_precomputed_mass_balance_dataset_url_invalid():
 
 def test_upload_mass_balance_csv(mock_file_content: bytes):
     with (
-        patch.object(api_helpers.os, "environ", {"DTC_API_PASSWORD": "fake_password"}),
+        patch.object(api_helpers.os, "environ", {"DTC_API_TOKEN": "fake_token"}),
         patch.object(api_helpers.requests, "post") as mock_post,
     ):
         mock_response = MagicMock()
@@ -62,7 +62,7 @@ def test_upload_mass_balance_csv(mock_file_content: bytes):
 
 def test_upload_mass_balance_csv_no_name(mock_file_content: bytes):
     with (
-        patch.object(api_helpers.os, "environ", {"DTC_API_PASSWORD": "fake_password"}),
+        patch.object(api_helpers.os, "environ", {"DTC_API_TOKEN": "fake_token"}),
         patch.object(api_helpers.requests, "post") as mock_post,
     ):
         mock_response = MagicMock()
@@ -89,7 +89,7 @@ def test_run_selrem_module_success(analysis_mode):
         patch.object(
             api_helpers.os,
             "environ",
-            {"DTC_API_PASSWORD": "fake_password"},
+            {"DTC_API_TOKEN": "fake_token"},
         ),
         patch.object(api_helpers.requests, "post") as mock_post,
         patch.object(api_helpers.requests, "get") as mock_get,
@@ -136,7 +136,7 @@ def test_run_selrem_module_success(analysis_mode):
 
 def test_run_selrem_module_job_failed():
     with (
-        patch.object(api_helpers.os, "environ", {"DTC_API_PASSWORD": "fake_password"}),
+        patch.object(api_helpers.os, "environ", {"DTC_API_TOKEN": "fake_token"}),
         patch.object(api_helpers.requests, "post") as mock_post,
         patch.object(api_helpers.requests, "get") as mock_get,
         patch.object(api_helpers.time, "sleep"),
