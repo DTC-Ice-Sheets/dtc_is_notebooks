@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import pytz
 import requests
 import yaml
+from IPython.display import display
 from dtc_query_client import (
     ApiClient,
     Configuration,
