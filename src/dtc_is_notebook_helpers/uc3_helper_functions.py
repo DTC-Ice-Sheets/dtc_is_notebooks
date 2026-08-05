@@ -12,7 +12,6 @@ import plotly.graph_objects as go
 import pytz
 import requests
 import yaml
-from IPython.display import display
 from dtc_query_client import (
     ApiClient,
     Configuration,
@@ -23,6 +22,7 @@ from dtc_query_client import (
     VariableItem,
 )
 from dtc_query_client.helpers import wait_for_job
+from IPython.display import display
 from plotly.colors import qualitative
 from plotly.subplots import make_subplots
 from traitlets import traitlets
@@ -739,7 +739,7 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
     res = await wait_for_job(client=client, job_id=res.job_id)
 
     output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
-    r = requests.get(output_url)  # noqa: S113
+    r = requests.get(output_url, timeout=10)
     r.raise_for_status()
     plot_data = r.json()
 
@@ -778,7 +778,7 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
         res = await wait_for_job(client=client, job_id=res.job_id)
 
         output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
-        r = requests.get(output_url)  # noqa: S113
+        r = requests.get(output_url, timeout=10)
         r.raise_for_status()
         results.append(r.json())
 
