@@ -151,7 +151,7 @@ def test_run_selrem_module_job_failed():
         mock_get_response_failed.raise_for_status.return_value = None
         mock_get.return_value = mock_get_response_failed
 
-        with pytest.raises(RuntimeError, match="SELREM job fake_job_id failed or was cancelled"):
+        with pytest.raises(RuntimeError, match="Job fake_job_id failed or was cancelled"):
             api_helpers.run_selrem_module(
                 vmb_url="s3://bucket/path/to/vmb",
                 scale=1.0,
