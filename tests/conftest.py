@@ -1,4 +1,5 @@
 """Shared test fixtures for use_case_2 tests."""
+
 from pathlib import Path
 
 import pytest
