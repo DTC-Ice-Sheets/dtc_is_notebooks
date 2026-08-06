@@ -10,7 +10,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 import yaml
-from typeguard import TypeCheckError
 
 import dtc_is_notebook_helpers.uc3_helper_functions as uc3
 from dtc_is_notebook_helpers.uc3_helper_functions import (
@@ -158,7 +157,7 @@ def test_pretty_dataset_name_to_dataset_name_unknown_returns_none(
 ) -> None:
     monkeypatch.setattr(uc3, "_load_dataset_yaml", lambda: variable_mappings)
 
-    with pytest.raises(TypeCheckError):
+    with pytest.raises(ValueError, match="Dataset label 'Unknown Dataset' not found in configuration."):
         _pretty_dataset_name_to_dataset_name("Unknown Dataset")
 
 

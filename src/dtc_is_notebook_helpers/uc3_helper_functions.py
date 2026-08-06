@@ -151,9 +151,19 @@ def _pretty_dataset_name_to_dataset_name(pretty_name: str) -> str:
     -------
     str
         Dataset identifier if found, otherwise ``None``.
+
+    Raises
+    ------
+    ValueError
+        If the provided label does not match any dataset in the configuration.
     """
     mapping = _pretty_dataset_names_to_dataset_names()
-    return mapping.get(pretty_name, None)
+    name = mapping.get(pretty_name, None)
+
+    if name is None:
+        raise ValueError(f"Dataset label '{pretty_name}' not found in configuration.")
+
+    return name
 
 
 def _dataset_name_to_pretty_dataset_name(dataset_name: str) -> str:
@@ -168,9 +178,19 @@ def _dataset_name_to_pretty_dataset_name(dataset_name: str) -> str:
     -------
     str
         Human-readable dataset label if found, otherwise ``None``.
+
+    Raises
+    ------
+    ValueError
+        If the provided identifier does not match any dataset in the configuration.
     """
     mapping = _dataset_names_to_pretty_dataset_names()
-    return mapping.get(dataset_name, None)
+    name = mapping.get(dataset_name, None)
+
+    if name is None:
+        raise ValueError(f"Dataset identifier '{dataset_name}' not found in configuration.")
+
+    return name
 
 
 def _var_names_to_pretty_var_names() -> dict:
@@ -201,9 +221,19 @@ def _var_name_to_pretty_var_name(var_name: str) -> str:
     -------
     str
         Human-readable variable label if found, otherwise ``None``.
+
+    Raises
+    ------
+    ValueError
+        If the provided identifier does not match any variable in the configuration.
     """
     mapping = _var_names_to_pretty_var_names()
-    return mapping.get(var_name, None)
+    name = mapping.get(var_name, None)
+
+    if name is None:
+        raise ValueError(f"Variable identifier '{var_name}' not found in configuration.")
+
+    return name
 
 
 def _var_name_units(var_name: str, dataset: str) -> str:
@@ -220,11 +250,17 @@ def _var_name_units(var_name: str, dataset: str) -> str:
     -------
     str
         Units string if found, otherwise ``None``.
+
+    Raises
+    ------
+    ValueError
+        If the provided variable identifier does not match any variable in the configuration.
     """
     dataset_config = _load_dataset_yaml()
     if dataset in dataset_config and var_name in dataset_config[dataset]["variables"]:
         return dataset_config[dataset]["variables"][var_name]["units"]
-    return None
+
+    raise ValueError(f"Variable identifier '{var_name}' not found in configuration.")
 
 
 async def get_ice_shelves(client: ApiClient) -> list[str]:
