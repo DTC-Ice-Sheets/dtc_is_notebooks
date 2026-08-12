@@ -28,3 +28,6 @@ build/
 .pytest_cache/
 # ruff
 .ruff_cache/
+
+# my environment variables
+.env
