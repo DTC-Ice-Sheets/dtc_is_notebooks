@@ -481,4 +481,3 @@ def plot_slr_location_four_panels(annual_slr_ds: xr.Dataset, lat0: float, lon0: 
     lat_str, lon_str = _format_latlon(lat2d[ilon, ilat], lon2d[ilon, ilat])
     plt.suptitle(f"Sea-level response at closest cell: {lat_str}, {lon_str}", fontsize=15)
     plt.tight_layout()
-    plt.show()
