@@ -162,10 +162,12 @@ def run_data_download(
     ----------
     dataset_id : str
         The ID of the dataset to download.
-    start_datetime : datetime
+    start_time : datetime
         The start datetime for the data download.
-    end_datetime : datetime
+    end_time : datetime
         The end datetime for the data download.
+    epsg4326_polygon : Polygon | MultiPolygon
+        Spatial filter polygon in EPSG:4326 (lon/lat) coordinates.
     variables : list[str] | None
         A list of variables to filter the data by, or None to download all variables.
 
