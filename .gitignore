@@ -29,3 +29,9 @@ build/
 .pytest_cache/
 # ruff
 .ruff_cache/
+
+# macOS folder metadata
+.DS_Store
+
+# Output written by the notebooks when they are run
+greenland_mb_validation_output/
