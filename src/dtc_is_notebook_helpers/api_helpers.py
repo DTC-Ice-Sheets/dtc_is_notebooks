@@ -148,6 +148,72 @@ def run_selrem_module(
     return ds
 
 
+def run_mass_balance_what_if(
+    ice_velocity_factor: float = 1.0,
+    land_surface_temperature_offset: float = 0.0,
+    radar_elevation_factor: float = 1.0,
+) -> tuple[xr.Dataset, xr.Dataset, dict]:
+    """
+    Run the DTC-IS mass balance prediction model on the current ice-sheet state.
+
+    The what-if module pushes the Earth observation state of the ice sheet (ice velocity, land surface
+    temperature, radar elevation change and the static ice-sheet properties) through the trained machine
+    learning model, and returns the predicted mass balance on the model grid together with an integrated
+    ice-sheet total. Leaving all three parameters at their defaults predicts the observed present-day state;
+    changing them explores a "what-if" scenario against the same control run.
+
+    Parameters
+    ----------
+    ice_velocity_factor : float
+        Scaling factor applied to the ice velocity field, by default 1.0.
+    land_surface_temperature_offset : float
+        Offset in Kelvin applied to the land surface temperature field, by default 0.0.
+    radar_elevation_factor : float
+        Scaling factor applied to the radar elevation change field, by default 1.0.
+
+    Returns
+    -------
+    tuple[xr.Dataset, xr.Dataset, dict]
+        The predicted mass balance dataset, the control mass balance dataset, and the summary of the run.
+        The summary holds the integrated totals in Gt/yr under the keys "total_mass_balance" and
+        "control_mass_balance", along with the grid description of the prediction.
+
+    Raises
+    ------
+    RuntimeError
+        If the what-if job fails, is cancelled, or does not publish the expected outputs.
+    """
+    resp = requests.post(
+        f"{DTC_QUERY_API_URL}/mass-balance/what-if",
+        headers=get_auth_headers(),
+        data=json.dumps(
+            {
+                "ice_velocity_factor": ice_velocity_factor,
+                "land_surface_temperature_offset": land_surface_temperature_offset,
+                "radar_elevation_factor": radar_elevation_factor,
+            }
+        ),
+        timeout=WORKFLOW_API_TIMEOUT,
+    )
+    resp.raise_for_status()
+    job_id = resp.json()["job_id"]
+    job_output = _poll_for_job_completion(job_id)
+
+    outputs = job_output["outputs"]
+    summary_url = outputs["postprocess"]["output_path"]
+    prediction_urls = outputs["mass-balance-predict"]["output_path"]
+    # The prediction step publishes the control run alongside the scenario run, in no guaranteed order.
+    control_url = next((url for url in prediction_urls if url.rstrip("/").endswith("control.zarr")), None)
+    predicted_url = next((url for url in prediction_urls if url != control_url), None)
+    if control_url is None or predicted_url is None:
+        raise RuntimeError(f"What-if job {job_id} did not publish both a predicted and a control dataset")
+
+    summary = requests.get(summary_url, timeout=WORKFLOW_API_TIMEOUT).json()
+    predicted_ds = xr.open_dataset(predicted_url, engine="zarr")
+    control_ds = xr.open_dataset(control_url, engine="zarr")
+    return predicted_ds, control_ds, summary
+
+
 def run_data_download(
     dataset_id: str,
     start_time: datetime,

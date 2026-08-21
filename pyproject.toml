@@ -31,6 +31,16 @@ contextily = "^1.7.0"
 ipydatetime = "^1.2.0"
 dtc-query-client = "^1.0.9"
 rioxarray = "^0.23.0"
+# Only needed to apply the DTC-IS mass-balance model to each year's own features, in the "mass-balance-model"
+# extra below: the trained model is a pickled XGBoost booster, and the per-year features are rebuilt from raw
+# netCDF inputs by interpolation.
+cloudpickle = { version = "^3.1", optional = true }
+xgboost = { version = "^3.0", optional = true }
+scipy = { version = "^1.15", optional = true }
+netCDF4 = { version = "^1.7", optional = true }
+
+[tool.poetry.extras]
+mass-balance-model = ["cloudpickle", "xgboost", "scipy", "netCDF4"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"
@@ -39,6 +49,11 @@ pre-commit = "^4.5"
 ruff = "^0.14.7"
 bandit = "^1.8.6"
 pytest-cov = "^7.0.0"
+# The "mass-balance-model" extra, so the tests can exercise the annual model prediction.
+cloudpickle = "^3.1"
+xgboost = "^3.0"
+scipy = "^1.15"
+netCDF4 = "^1.7"
 
 [tool.ruff]
 line-length = 120
