@@ -261,32 +261,6 @@ class AnnualFeatureModel:
         model_url: str = XGB_MODEL_URL,
         cache_dir: Path | None = None,
     ) -> None:
-        """
-        Load the baseline feature grid and the trained model, and locate the raw per-year inputs.
-
-        Parameters
-        ----------
-        dataprep_dir : str | Path | None
-            Directory holding the raw ESA CCI surface elevation change file and, optionally, a
-            ``c3s_ist_monthly`` subdirectory of monthly surface-temperature files. When None, the
-            ``DTC_IS_DATAPREP_DIR`` environment variable is used.
-        lst_table_path : str | Path | None
-            Pickled annual surface-temperature point table (columns ``X``, ``Y`` and one column per year).
-            This is the temperature the model was trained on, so it is preferred over averaging the monthly
-            files. When None, the ``DTC_IS_LST_TABLE`` environment variable is used.
-        feature_grid_url : str
-            Baseline feature grid, by default the published :data:`FEATURE_GRID_URL`.
-        model_url : str
-            Trained model bundle, by default the published :data:`XGB_MODEL_URL`.
-        cache_dir : Path | None
-            Directory the downloaded model is cached in, by default :data:`DEFAULT_CACHE_DIR`.
-
-        Raises
-        ------
-        TemporalFeaturesUnavailableError
-            If neither the DataPrep directory nor the annual temperature table can be found, since the
-            prediction would then repeat the baseline epoch for every year rather than describe it.
-        """
         self.dataprep_dir = _resolve_optional_path(dataprep_dir, DATAPREP_DIR_ENV_VAR)
         self.lst_table_path = _resolve_optional_path(lst_table_path, LST_TABLE_ENV_VAR)
         if self.dataprep_dir is None and self.lst_table_path is None:
@@ -391,8 +365,7 @@ class AnnualFeatureModel:
         if self._lst_table is None:
             table = pd.DataFrame()
             if self.lst_table_path is not None and self.lst_table_path.is_file():
-                # The published LST table is a trusted artifact shipped with the model.
-                candidate = pd.read_pickle(self.lst_table_path)  # nosec B301
+                candidate = pd.read_pickle(self.lst_table_path)  # nosec B301  # noqa: S301
                 if isinstance(candidate, pd.DataFrame) and {"X", "Y"} <= set(candidate.columns):
                     table = candidate
             self._lst_table = table
@@ -562,8 +535,7 @@ def _load_xgb_model(model_url: str, cache_dir: Path | None = None) -> tuple[obje
 
     local = Path(model_url).expanduser()
     path = local if local.is_file() else _download_to_cache(model_url, XGB_MODEL_FILENAME, cache_dir)
-    # The published DTC-IS model bundle is a trusted artifact shipped with the project.
-    bundle = cloudpickle.loads(path.read_bytes())  # nosec B301
+    bundle = cloudpickle.loads(path.read_bytes())  # nosec B301  # noqa: S301
     if isinstance(bundle, dict):
         return bundle["model"], list(bundle["feature_names"])
     return bundle[0], list(bundle[1])

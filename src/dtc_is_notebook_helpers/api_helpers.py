@@ -110,22 +110,16 @@ def run_selrem_module(
         The start year for the analysis period.
     end_year : int
         The end year for the analysis period.
-    analysis_mode : str, optional
-        The analysis mode to use, should be either "global" or "annual", by default "global"
+    analysis_mode : str
+        The analysis mode to use. This should be either "global" or "annual".
 
     Returns
     -------
     xr.Dataset
         The xarray dataset containing the sea-level response data.
-
-    Raises
-    ------
-    RuntimeError
-        If the SELREM job fails or is cancelled.
     """
     start_time = datetime(start_year, 1, 1)
     end_time = datetime(end_year, 12, 31)
-    """Run the SELREM module to compute and plot sea-level response from mass balance data."""
     resp = requests.post(
         f"{DTC_QUERY_API_URL}/sea-level-response",
         headers=get_auth_headers(),
@@ -241,11 +235,6 @@ def run_data_download(
     -------
     str
         The public HTTP URL to a GeoZarr containing the downloaded data.
-
-    Raises
-    ------
-    RuntimeError
-        If the data download fails.
     """
     resp = requests.post(
         f"{DTC_QUERY_API_URL}/datasets/download",
@@ -294,11 +283,6 @@ def mass_balance_from_thickness(
     -------
     str
         The public HTTP URL to a GeoZarr containing the derived mass balance data.
-
-    Raises
-    ------
-    RuntimeError
-        If the mass balance derivation job fails or is cancelled.
     """
     resp = requests.post(
         f"{DTC_QUERY_API_URL}/mass-balance/from-thickness",
