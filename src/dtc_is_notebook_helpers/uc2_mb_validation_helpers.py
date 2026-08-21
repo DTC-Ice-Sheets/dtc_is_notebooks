@@ -391,7 +391,8 @@ class AnnualFeatureModel:
         if self._lst_table is None:
             table = pd.DataFrame()
             if self.lst_table_path is not None and self.lst_table_path.is_file():
-                candidate = pd.read_pickle(self.lst_table_path)  # noqa: S301 - a table published with the model
+                # The published LST table is a trusted artifact shipped with the model.
+                candidate = pd.read_pickle(self.lst_table_path)  # nosec B301
                 if isinstance(candidate, pd.DataFrame) and {"X", "Y"} <= set(candidate.columns):
                     table = candidate
             self._lst_table = table
@@ -561,7 +562,8 @@ def _load_xgb_model(model_url: str, cache_dir: Path | None = None) -> tuple[obje
 
     local = Path(model_url).expanduser()
     path = local if local.is_file() else _download_to_cache(model_url, XGB_MODEL_FILENAME, cache_dir)
-    bundle = cloudpickle.loads(path.read_bytes())  # noqa: S301 - the model published with the DTC-IS module
+    # The published DTC-IS model bundle is a trusted artifact shipped with the project.
+    bundle = cloudpickle.loads(path.read_bytes())  # nosec B301
     if isinstance(bundle, dict):
         return bundle["model"], list(bundle["feature_names"])
     return bundle[0], list(bundle[1])
