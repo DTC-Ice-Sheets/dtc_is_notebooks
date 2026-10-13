@@ -1184,11 +1184,22 @@ class ShapeModel:
 
     def profile(self, values: Values,
                 extras: pd.DataFrame | np.ndarray | None = None) -> pd.Series:
-        """Discharge through one melt season, m3/s. Takes a year or a curve."""
+        """Discharge through one melt season, m3/s. Takes a year or a curve.
+
+        An `extras` row given here is used as it stands, which is what a
+        held-out season needs: its own extra predictors are known, but the
+        model was fitted without them, so looking the year up would silently
+        fall back to the training mean and the prediction would not depend on
+        them at all.
+        """
         curve = self._as_shape(values)
-        offset = (self._offset(int(values)) if np.isscalar(values)
-                  else (0.0 if extras is None
-                        else float(self.extra_coefficients @ np.asarray(extras, float))))
+        if extras is not None:
+            offset = float(self.extra_coefficients
+                           @ np.asarray(extras, dtype=float).ravel())
+        elif np.isscalar(values):
+            offset = self._offset(int(values))
+        else:
+            offset = 0.0
         return pd.Series(
             np.clip(self.intercept + offset + self.slope * curve, 0.0, None),
             index=self.starts, name="m3s")

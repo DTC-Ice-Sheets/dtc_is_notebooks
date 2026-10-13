@@ -237,6 +237,22 @@ def test_shape_model_takes_an_extra_predictor_per_season(discharge, monthly):
     assert len(model.extra_coefficients) == 1
 
 
+def test_shape_model_uses_an_extras_row_it_is_handed(discharge, monthly):
+    # A held-out season knows its own extra predictors even though the model
+    # was fitted without them. If the row passed here were ignored, the fitted
+    # model would quietly fall back to the training mean and the prediction
+    # would not depend on the extra predictor at all - which is exactly what a
+    # leave-one-year-out test of that predictor must not do.
+    years = list(_levels())
+    extras = pd.DataFrame({"lake": _levels()}, index=years)
+    held = years[-1]
+    model = uc1.ShapeModel.fit(discharge[discharge.index.year != held], monthly,
+                               extras=extras.drop(index=held))
+    low = model.profile(held, extras=extras.loc[[held]])
+    high = model.profile(held, extras=extras.loc[[held]] * 5)
+    assert not np.allclose(low.to_numpy(), high.to_numpy())
+
+
 def test_shape_leave_one_year_out_holds_each_season_back(discharge, monthly):
     out = uc1.shape_leave_one_year_out(discharge, monthly)
     assert set(out.columns.get_level_values(0)) == {"observed", "predicted"}
