@@ -3,7 +3,7 @@ Use Case 1 - Hydropower. The machinery behind the demonstrator notebook.
 
 The method follows David Parkes' original demonstrator: a single number
 describing a melt season is used to predict discharge in each sub-period of
-that season separately. One regression per week, sixteen of them, each fitted
+that season separately. One regression per week, twenty-two of them, each
 across years. The seasonal number sets how big the year is; the per-week
 regressions set the shape.
 
@@ -24,6 +24,7 @@ be replaced without disturbing those either side of it.
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -599,9 +600,9 @@ class Scenario:
         """Every year of the scenario as a profile.
 
         A model fitted with extra predictors needs values for them too; the
-        scenario carries only the climate-model term, so the others are held at
-        their training mean. That is the honest default - a future EO dataset
-        does not exist to be perturbed.
+        scenario carries only the climate-model term, so the others are set to
+        zero. A future EO dataset does not exist to be perturbed, and zero is
+        the value that leaves the climate term carrying the scenario alone.
         """
         table = _as_frame(self.values)
         if len(model.names) > table.shape[1]:
@@ -986,3 +987,303 @@ def mesh_map(ax: "object", vertices: np.ndarray, values: np.ndarray,
         ax.set_xlim(x.min() - margin_km, x.max() + margin_km)
         ax.set_ylim(y.min() - margin_km, y.max() + margin_km)
     return surface
+
+
+def month_axis(ax: "object", months: tuple = MELT_MONTHS) -> None:
+    """Label an axis measured in days of the year with month names instead.
+
+    A melt season is read in months rather than in the 121st to the 266th day
+    of the year, and the day a step happens to start on means nothing to a
+    reader. The ticks sit on the first of each month, so the space between two
+    of them is the month itself.
+    """
+    stamps = [pd.Timestamp(2015, month, 1) for month in (*months, months[-1] + 1)]
+    ax.set_xticks([stamp.dayofyear for stamp in stamps])
+    ax.set_xticklabels([stamp.strftime("%b") for stamp in stamps])
+    ax.set_xlabel("")
+
+
+def headroom(ax: "object", fraction: float = 0.22) -> None:
+    """Leave space above the data, so a legend at the top does not sit on it."""
+    bottom, top = ax.get_ylim()
+    ax.set_ylim(bottom, bottom + (top - bottom) * (1.0 + fraction))
+
+
+def label_points(ax: "object", x: object, y: object, labels: object,
+                 fontsize: int = 8, colour: str = "#666666") -> None:
+    """Name every point, nudged so that the names do not land on each other.
+
+    Each label is tried in a few positions around its point and keeps the
+    first that is clear of the labels already placed. Where a cluster leaves
+    nowhere free, the last position is kept rather than the label dropped.
+    """
+    figure = ax.figure
+    figure.canvas.draw()
+    renderer = figure.canvas.get_renderer()
+    offsets = [(4, 3), (4, -11), (-4, 3), (-4, -11), (0, 10), (0, -16)]
+    placed = []
+    for xi, yi, text in zip(np.asarray(x), np.asarray(y), labels, strict=False):
+        note = ax.annotate(str(text), (xi, yi), xytext=offsets[0],
+                           textcoords="offset points", fontsize=fontsize,
+                           color=colour)
+        for dx, dy in offsets:
+            note.set_position((dx, dy))
+            note.set_ha("left" if dx >= 0 else "right")
+            box = note.get_window_extent(renderer)
+            if not any(box.overlaps(other) for other in placed):
+                break
+        placed.append(box)
+
+
+# --------------------------------------------------------------------------
+# The season's shape, rather than its size
+#
+# `ProfileModel` gives every season the same shape, scaled by one number. This
+# reads the climate model's own within-season curve instead, and fits a single
+# relationship from it to measured discharge. It is the more accurate of the
+# two on this catchment, and it needs a monthly curve rather than a number, so
+# the two have different uses rather than one replacing the other.
+# --------------------------------------------------------------------------
+
+def season_shape(flow: pd.Series, year: int, step_days: int, lag: int) -> np.ndarray:
+    """One season's runoff curve, sampled at the middle of each step."""
+    starts = _step_starts(step_days)
+    middle = starts + step_days // 2
+    season = flow[flow.index.year == year]
+    if not len(season):
+        return np.full(len(starts), np.nan)
+    # zero at the shoulders so the interpolation ramps in and out
+    knots_x = [_doy(year, MELT_MONTHS[0] - 1)]
+    knots_y = [0.0]
+    for ts, value in season.items():
+        knots_x.append(_doy(year, ts.month))
+        knots_y.append(float(value))
+    knots_x.append(_doy(year, MELT_MONTHS[-1] + 1))
+    knots_y.append(0.0)
+    return np.interp(middle - step_days * lag, knots_x, knots_y)
+
+
+def shape_matrix(monthly_mm: pd.Series, years: Years, step_days: int = 7, lag: int = 0,
+                 area_m2: float = CATCHMENT_AREA_M2) -> pd.DataFrame:
+    """Runoff curves for several seasons, rows years and columns day-of-year."""
+    flow = monthly_flow(monthly_mm, area_m2)
+    starts = _step_starts(step_days)
+    return pd.DataFrame({int(y): season_shape(flow, int(y), step_days, lag)
+                         for y in years}, index=starts).T
+
+
+@dataclass
+class ShapeModel:
+    """Discharge from the shape of the climate model's season."""
+
+    starts: np.ndarray
+    step_days: int
+    lag: int
+    slope: float
+    intercept: float
+    residual_sd: float
+    sd_intercept: float
+    sd_slope: float
+    dof: int
+    n: int
+    xbar: float
+    sxx: float
+    years: np.ndarray
+    r2: float
+    monthly: pd.Series
+    area_m2: float
+    extra_names: list
+    extra_coefficients: np.ndarray
+    extras: pd.DataFrame | None
+
+    @classmethod
+    def fit(cls, discharge: pd.Series, monthly_mm: pd.Series, step_days: int = 7,
+            lags: tuple[int, ...] = (0, 1, 2, 3),
+            extras: pd.DataFrame | None = None,
+            area_m2: float = CATCHMENT_AREA_M2) -> "ShapeModel":
+        """Fit the curve, and optionally extra per-season predictors.
+
+        `extras` is one value per season per predictor - a lake-intensity
+        coefficient, say - held constant across the steps of that season. The
+        curve carries the within-season shape, the extras shift the level.
+        """
+        observed = step_matrix(discharge, step_days)
+        flow = monthly_flow(monthly_mm, area_m2)
+        years = np.array([y for y in observed.index if y in set(flow.index.year)])
+        extra_frame = None
+        if extras is not None:
+            extra_frame = (extras.to_frame() if isinstance(extras, pd.Series)
+                           else pd.DataFrame(extras))
+            years = np.array([y for y in years if y in extra_frame.index])
+            extra_frame = extra_frame.loc[years]
+        truth = observed.loc[years].to_numpy(dtype=float)
+        n_steps = truth.shape[1]
+
+        best = None
+        for lag in lags:
+            shapes = shape_matrix(monthly_mm, years, step_days, lag, area_m2)
+            columns = [np.ones(truth.size), shapes.to_numpy(dtype=float).ravel()]
+            if extra_frame is not None:
+                for name in extra_frame.columns:
+                    columns.append(np.repeat(
+                        extra_frame[name].to_numpy(dtype=float), n_steps))
+            design = np.column_stack(columns)
+            y = truth.ravel()
+            keep = np.isfinite(y) & np.isfinite(design).all(axis=1)
+            if keep.sum() < design.shape[1] + 1:
+                continue
+            beta, *_ = np.linalg.lstsq(design[keep], y[keep], rcond=None)
+            residuals = y[keep] - design[keep] @ beta
+            rmse = float(np.sqrt(np.mean(residuals ** 2)))
+            if best is None or rmse < best[0]:
+                best = (rmse, lag, beta[1], beta[0], design[keep, 1], y[keep],
+                        residuals, beta[2:])
+
+        rmse, lag, slope, intercept, x, y, residuals, extra_beta = best
+        dof = max(len(x) - 2, 1)
+        denominator = float(((y - y.mean()) ** 2).sum())
+        # The scatter is not constant - a week predicted at 1500 m3/s misses by
+        # far more than a week predicted at 50. A single pooled sd would be too
+        # wide at the shoulders of the season and too narrow at the peak, so
+        # fit the spread as a function of the predicted flow. The sqrt(pi/2)
+        # converts mean absolute deviation to a standard deviation.
+        fitted = y - residuals
+        sd_slope, sd_intercept = np.polyfit(fitted, np.abs(residuals), 1)
+        scale = float(np.sqrt(np.pi / 2.0))
+        return cls(starts=np.asarray(observed.columns, dtype=int),
+                   step_days=step_days, lag=int(lag), slope=float(slope),
+                   intercept=float(intercept),
+                   residual_sd=float(np.sqrt((residuals ** 2).sum() / dof)),
+                   sd_intercept=float(sd_intercept * scale),
+                   sd_slope=float(sd_slope * scale), dof=int(dof), n=int(len(x)), xbar=float(x.mean()),
+                   sxx=float(((x - x.mean()) ** 2).sum()), years=years,
+                   r2=float(1 - (residuals ** 2).sum() / denominator) if denominator else np.nan,
+                   monthly=monthly_mm, area_m2=area_m2,
+                   extra_names=list(extra_frame.columns) if extra_frame is not None else [],
+                   extra_coefficients=np.asarray(extra_beta, dtype=float),
+                   extras=extra_frame)
+
+    # ------------------------------------------------------------ predict --
+    def shape(self, year: int) -> np.ndarray:
+        """Give the runoff curve this model would use for a season."""
+        flow = monthly_flow(self.monthly, self.area_m2)
+        return season_shape(flow, int(year), self.step_days, self.lag)
+
+    def _as_shape(self, values: Values) -> np.ndarray:
+        if np.isscalar(values):
+            return self.shape(values)
+        return np.asarray(values, dtype=float).ravel()
+
+    def _offset(self, year: int | None) -> float:
+        """Contribution of the extra per-season predictors, if any."""
+        if not self.extra_names or self.extras is None or year is None:
+            return 0.0
+        if year not in self.extras.index:
+            return float(self.extra_coefficients @ self.extras.mean().to_numpy())
+        return float(self.extra_coefficients @ self.extras.loc[year].to_numpy(float))
+
+    def profile(self, values: Values,
+                extras: pd.DataFrame | np.ndarray | None = None) -> pd.Series:
+        """Discharge through one melt season, m3/s. Takes a year or a curve."""
+        curve = self._as_shape(values)
+        offset = (self._offset(int(values)) if np.isscalar(values)
+                  else (0.0 if extras is None
+                        else float(self.extra_coefficients @ np.asarray(extras, float))))
+        return pd.Series(
+            np.clip(self.intercept + offset + self.slope * curve, 0.0, None),
+            index=self.starts, name="m3s")
+
+    def profiles(self, years: Years) -> pd.DataFrame:
+        """One profile per season: rows are years, columns day-of-year."""
+        index = getattr(years, "index", years)
+        return pd.DataFrame({int(y): self.profile(int(y)) for y in index}).T
+
+    def prediction_se(self, values: Values) -> np.ndarray:
+        """Give the standard error of a new observation, per step.
+
+        Simple-regression prediction error: the residual scatter, widened by
+        the uncertainty of the fitted line and by how far the runoff value sits
+        from the mean of the values it was fitted on.
+        """
+        curve = self._as_shape(values)
+        offset = self._offset(int(values)) if np.isscalar(values) else 0.0
+        fitted = np.clip(self.intercept + offset + self.slope * curve, 0.0, None)
+        local_sd = np.clip(self.sd_intercept + self.sd_slope * fitted,
+                           0.05 * self.residual_sd, None)
+        leverage = 1.0 / self.n + (curve - self.xbar) ** 2 / self.sxx
+        return local_sd * np.sqrt(1.0 + np.clip(leverage, 0.0, None))
+
+    def leverage(self, values: Values) -> float:
+        """Say how wide this season's band is against a typical one."""
+        here = float(np.nanmean(self.prediction_se(values)))
+        centre = float(np.nanmean(
+            [np.nanmean(self.prediction_se(int(y))) for y in self.years]))
+        return here / centre if centre else 1.0
+
+    def _multiplier(self, sigmas: float | None, level: float) -> float:
+        if sigmas is not None:
+            level = math.erf(sigmas / math.sqrt(2.0))
+        return _t_quantile(0.5 + level / 2.0, self.dof)
+
+    def band(self, values: Values, sigmas: float | None = None,
+             level: float = 0.68) -> pd.DataFrame:
+        """Prediction interval around one season, at one coverage."""
+        centre = self.profile(values)
+        spread = pd.Series(self.prediction_se(values) * self._multiplier(sigmas, level),
+                           index=self.starts)
+        return pd.DataFrame({"predicted": centre,
+                             "lower": (centre - spread).clip(lower=0),
+                             "upper": centre + spread})
+
+    def bands(self, values: Values,
+              levels: Sequence[float] = (0.68, 0.95)) -> pd.DataFrame:
+        """Several coverages at once: columns lower_68, upper_68, lower_95, ..."""
+        out = pd.DataFrame({"predicted": self.profile(values)})
+        for level in levels:
+            band = self.band(values, level=level)
+            tag = f"{round(level * 100)}"
+            out[f"lower_{tag}"] = band["lower"]
+            out[f"upper_{tag}"] = band["upper"]
+        return out
+
+    def __str__(self) -> str:
+        """Summarise the fit in one line."""
+        extra = (f" plus {', '.join(self.extra_names)}" if self.extra_names else "")
+        return (f"{len(self.starts)} steps of {self.step_days} days, fitted across "
+                f"{len(self.years)} seasons ({self.years.min()}-{self.years.max()}) "
+                f"on the runoff curve with a {self.lag}-step lag{extra}. "
+                f"r2 = {self.r2:.2f}, residual sd {self.residual_sd:.0f} m3/s.")
+
+
+def shape_leave_one_year_out(discharge: pd.Series, monthly_mm: pd.Series,
+                             step_days: int = 7, extras: pd.DataFrame | None = None,
+                             lags: tuple = (0, 1, 2, 3),
+                             area_m2: float = CATCHMENT_AREA_M2) -> pd.DataFrame:
+    """Predict each season from a shape model that never saw that season.
+
+    The companion to `leave_one_year_out` for `ShapeModel`. The lag and the
+    line are both chosen inside each fold, and any extra per-season predictor
+    is refitted there too, so nothing about the held-out year reaches the model
+    that predicts it.
+
+    Returns the same observed/predicted frame the other models return.
+    """
+    observed = step_matrix(discharge, step_days)
+    flow_years = set(monthly_mm.index.year)
+    years = [year for year in observed.index if year in flow_years]
+    if extras is not None:
+        years = [year for year in years if year in set(extras.index)]
+    predicted = pd.DataFrame(index=years, columns=observed.columns, dtype=float)
+
+    for year in years:
+        others = [other for other in years if other != year]
+        model = ShapeModel.fit(discharge[discharge.index.year != year], monthly_mm,
+                               step_days, lags=lags,
+                               extras=None if extras is None else extras.loc[others],
+                               area_m2=area_m2)
+        row = None if extras is None else extras.loc[[year]]
+        predicted.loc[year] = model.profile(year, extras=row).to_numpy()
+
+    return pd.concat({"observed": observed.loc[years], "predicted": predicted},
+                     axis=1)
+

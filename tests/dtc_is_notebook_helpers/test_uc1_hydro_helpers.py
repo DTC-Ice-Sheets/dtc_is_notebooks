@@ -192,6 +192,66 @@ def test_runoff_as_discharge_shifts_the_season_for_travel_time(discharge):
     assert lagged["predicted"].loc[FIRST_YEAR].to_numpy().argmax() == peak + 1
 
 
+# --------------------------------------------------------------------------
+# The shape model. Same synthetic season, but the monthly curve is what drives
+# it, so the tests are about the curve getting through rather than the total.
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def monthly(discharge) -> pd.Series:
+    """Monthly runoff shaped like the discharge it should predict."""
+    months = pd.date_range(f"{FIRST_YEAR}-05-01", f"{LAST_YEAR}-09-01", freq="MS")
+    months = months[months.month.isin(uc1.MELT_MONTHS)]
+    shape = np.exp(-((months.dayofyear.to_numpy() - PEAK_DOY) ** 2) / (2 * 40.0**2))
+    level = np.array([_levels()[stamp.year] for stamp in months])
+    return pd.Series(120.0 * level * shape, index=months)
+
+
+def test_shape_model_recovers_a_season_it_was_built_from(discharge, monthly):
+    model = uc1.ShapeModel.fit(discharge, monthly)
+    # Five monthly points interpolated across 22 steps will not match a smooth
+    # Gaussian season exactly, so this is a floor rather than a target.
+    assert model.r2 > 0.6
+    assert model.lag in (0, 1, 2, 3)
+    assert len(model.starts) == 22
+
+
+def test_shape_model_profiles_cover_every_season(discharge, monthly):
+    model = uc1.ShapeModel.fit(discharge, monthly)
+    profiles = model.profiles(model.years)
+    assert list(profiles.index) == list(model.years)
+    assert (profiles.to_numpy() >= 0).all()
+
+
+def test_shape_model_bands_widen_with_coverage(discharge, monthly):
+    model = uc1.ShapeModel.fit(discharge, monthly)
+    bands = model.bands(FIRST_YEAR + 1, levels=(0.68, 0.95))
+    assert (bands["upper_95"] >= bands["upper_68"]).all()
+    assert (bands["lower_95"] <= bands["lower_68"]).all()
+
+
+def test_shape_model_takes_an_extra_predictor_per_season(discharge, monthly):
+    extras = pd.DataFrame({"lake": _levels()}, index=list(_levels()))
+    model = uc1.ShapeModel.fit(discharge, monthly, extras=extras)
+    assert model.extra_names == ["lake"]
+    assert len(model.extra_coefficients) == 1
+
+
+def test_shape_leave_one_year_out_holds_each_season_back(discharge, monthly):
+    out = uc1.shape_leave_one_year_out(discharge, monthly)
+    assert set(out.columns.get_level_values(0)) == {"observed", "predicted"}
+    assert len(out) == LAST_YEAR - FIRST_YEAR + 1
+    assert uc1.profile_skill(out)["r2"] > 0.5
+
+
+def test_season_shape_is_zero_outside_the_melt_season(discharge, monthly):
+    flow = uc1.monthly_flow(monthly)
+    curve = uc1.season_shape(flow, FIRST_YEAR, 7, 0)
+    assert len(curve) == 22
+    assert np.isfinite(curve).all()
+    assert curve.min() >= 0.0
+
+
 def test_model_str_names_the_predictor(model):
     assert "ProfileModel" in str(model)
     assert "catchment sum" in str(model)
@@ -333,6 +393,39 @@ def test_mesh_map_draws_the_triangulation_it_is_given(tmp_path):
                  np.array([[0, 1, 2], [0, 2, 3]]), edges=True)
     assert ax.lines, "edges=True should draw the mesh"
     assert all(line.get_clip_path() is not None for line in ax.lines)
+    plt.close(figure)
+
+
+def test_headroom_only_lifts_the_top_of_the_axis():
+    figure, ax = plt.subplots()
+    ax.plot([0, 1], [0.0, 10.0])
+    bottom, top = ax.get_ylim()
+    uc1.headroom(ax, 0.5)
+    assert ax.get_ylim()[0] == pytest.approx(bottom)
+    assert ax.get_ylim()[1] == pytest.approx(bottom + (top - bottom) * 1.5)
+    plt.close(figure)
+
+
+def test_label_points_moves_a_label_that_would_sit_on_another():
+    figure, ax = plt.subplots()
+    # Fixed limits, and two points a pixel or so apart, so the first position
+    # one label takes is certain to be in the way of the next.
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.scatter([5.0, 5.02], [5.0, 5.0])
+    uc1.label_points(ax, [5.0, 5.02], [5.0, 5.0], ["2019", "2020"])
+    first, second = [note.get_position() for note in ax.texts]
+    assert first != second
+    assert [note.get_text() for note in ax.texts] == ["2019", "2020"]
+    plt.close(figure)
+
+
+def test_month_axis_puts_month_names_on_a_day_of_year_axis():
+    figure, ax = plt.subplots()
+    ax.plot([121, 200, 273], [1.0, 2.0, 1.0])
+    uc1.month_axis(ax)
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["May", "Jun", "Jul", "Aug", "Sep", "Oct"]
+    assert list(ax.get_xticks()) == [121, 152, 182, 213, 244, 274]
     plt.close(figure)
 
 
