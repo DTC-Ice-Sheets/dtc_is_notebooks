@@ -51,18 +51,6 @@ class LoadedButton(widgets.Button):
     """A button that can hold a value as an attribute."""
 
     def __init__(self: LoadedButton, value: object = None, *args: object, **kwargs: object) -> None:
-        """
-        Initialize the button with an attached value trait.
-
-        Parameters
-        ----------
-        value : any, optional
-            Initial value stored on the button, by default None.
-        *args
-            Positional arguments forwarded to ``widgets.Button``.
-        **kwargs
-            Keyword arguments forwarded to ``widgets.Button``.
-        """
         super(LoadedButton, self).__init__(*args, **kwargs)
         self.add_traits(value=traitlets.Any(value))
 
@@ -845,9 +833,9 @@ def customwrap(s: str, width: int = 16, separator: str = "<br>") -> str:
     ----------
     s : str
         String to wrap.
-    width : int, optional
+    width : int
         Maximum line width in characters. Default is 16.
-    separator : str, optional
+    separator : str
         String to use for line breaks. Default is "<br>".
 
     Returns
@@ -872,6 +860,10 @@ def plot_covariate_analysis(
         Dictionary containing variable data, histograms, and covariate statistics.
     analysis_type : CovariateAnalysisType
         Type of analysis to determine which statistics to display.
+    plot_height : int
+        Height of the output figure in pixels.
+    plot_width : int
+        Width of the output figure in pixels.
 
     Returns
     -------
@@ -1013,6 +1005,8 @@ def plot_timeseries_data(timeseries_data: dict, pretty_labels: bool = True) -> g
     ----------
     timeseries_data : dict
         Dictionary containing variable names and their corresponding time series values.
+    pretty_labels : bool
+        Whether to use human-readable labels rather than raw variable names.
 
     Returns
     -------
