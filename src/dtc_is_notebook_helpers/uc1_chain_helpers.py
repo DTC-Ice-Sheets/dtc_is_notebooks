@@ -422,7 +422,7 @@ def run_fts(matrix: pd.DataFrame, model_coeff_r: str | Path, delta: int = 5,
     except Exception as error:                       # noqa: BLE001
         raise ModulesUnavailableError(
             f"cannot import rpy2 ({type(error).__name__}: {error}). The FTS module "
-            "runs through R; install rpy2 with ftsa 6.6, or point `cache` at "
+            "runs through R; install rpy2 with the hdftsa R package, or point `cache` at "
             "coefficients from an earlier run."
         ) from error
 
