@@ -73,6 +73,17 @@ def test_plot_scaled_mean_mass_balance_invalid_dataset_value(example_mean_mass_b
             )
 
 
+def test_plot_scaled_mean_mass_balance_infer_from_lat(example_mean_mass_balance_dataset: xr.Dataset):
+    # Should succeed without raising when infer_from_lat=True, even for an unknown dataset_value
+    with patch("matplotlib.pyplot.show"):
+        uc2_plotting_helpers.plot_scaled_mean_mass_balance(
+            mean_mb_ds=example_mean_mass_balance_dataset,
+            dataset_value="unknown_region",
+            plot_description_str="Inferred dataset",
+            infer_from_lat=True,
+        )
+
+
 def test_plot_global_slr_three_panels_runs_no_error(
     example_global_slr_dataset: xr.Dataset, example_mean_mass_balance_dataset: xr.Dataset
 ):
