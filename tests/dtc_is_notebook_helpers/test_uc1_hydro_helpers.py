@@ -274,86 +274,6 @@ def test_model_str_names_the_predictor(model):
 
 
 # --------------------------------------------------------------------------
-# Loaders. Written against files this test builds, so a change in the real
-# export is a change here rather than a silent wrong answer.
-# --------------------------------------------------------------------------
-
-def test_load_discharge_reads_the_bucket_csv_with_date_columns(tmp_path):
-    path = tmp_path / "watson.csv"
-    rows = ["year,month,day,a,b,c,d,flux",
-            "2006,6,1,0,0,0,0,12.5",
-            "2006,6,2,0,0,0,0,-9999",
-            "2006,6,3,0,0,0,0,14.5"]
-    path.write_text("\n".join(rows))
-
-    series = uc1.load_discharge(path)
-
-    assert series.index[0] == pd.Timestamp("2006-06-01")
-    assert series.iloc[0] == 12.5
-    assert np.isnan(series.iloc[1])         # -9999 is the missing marker
-    assert series.name == "discharge_m3s"
-
-
-def test_load_discharge_without_date_columns_counts_from_2006(tmp_path):
-    path = tmp_path / "plain.csv"
-    path.write_text("a,b,c,d,e,f,g,flux\n" + "\n".join(f"0,0,0,0,0,0,0,{v}" for v in (1.0, 2.0, 3.0)))
-
-    series = uc1.load_discharge(path)
-
-    assert series.index[0] == pd.Timestamp("2006-01-01")
-    assert len(series) == 3
-
-
-def test_load_discharge_reads_the_geus_export(tmp_path):
-    path = tmp_path / "geus.txt"
-    header = "Year\tMonthOfYear\tDayOfMonth\tWaterFluxDiversOnly\tWaterFluxDiversAndTemperature"
-    rows = ["2006\t6\t1\t5.0\t11.0", "2006\t6\t2\t5.0\t-9999", "2006\t6\t3\t5.0\t13.0"]
-    path.write_text("\n".join([header, *rows]))
-
-    series = uc1.load_discharge(path)
-
-    # The gap-filled column is the one wanted, and the -9999 row is dropped.
-    assert list(series.to_numpy()) == [11.0, 13.0]
-
-
-def test_load_grf_matrix_puts_five_months_in_each_season(tmp_path):
-    path = tmp_path / "matrix.csv"
-    # Two mesh nodes, ten snapshots: two seasons of May to September.
-    np.savetxt(path, np.zeros((2, 10)), delimiter=",")
-
-    frame = uc1.load_grf_matrix(path, start_year=2014)
-
-    assert list(frame.index.year.unique()) == [2014, 2015]
-    assert list(frame.index.month.unique()) == list(uc1.MELT_MONTHS)
-    # log10 is the default, so zeros come back as ones.
-    assert (frame.to_numpy() == 1.0).all()
-
-
-def test_load_grf_matrix_can_be_told_the_values_are_not_logs(tmp_path):
-    path = tmp_path / "matrix.csv"
-    np.savetxt(path, np.zeros((2, 5)), delimiter=",")
-    assert (uc1.load_grf_matrix(path, 2014, log10=False).to_numpy() == 0.0).all()
-
-
-def test_load_coefficients_reads_a_factor_table(tmp_path):
-    path = tmp_path / "coeffs.csv"
-    pd.DataFrame({"f1": [1.0, 2.0], "f2": [3.0, 4.0]}).to_csv(path, index=False)
-    assert uc1.load_coefficients(path).shape == (2, 2)
-
-
-def test_load_coefficients_treats_a_written_row_index_as_an_index(tmp_path):
-    # The cache is written with its index, and a row number read as a factor is
-    # the kind of mistake that changes the answer without anything failing.
-    path = tmp_path / "cached.csv"
-    pd.DataFrame({"f1": [10.0, 20.0], "f2": [30.0, 40.0]}).to_csv(path)
-
-    frame = uc1.load_coefficients(path)
-
-    assert frame.shape == (2, 2)
-    np.testing.assert_allclose(frame["factor_1"].to_numpy(), [10.0, 20.0])
-
-
-# --------------------------------------------------------------------------
 # The catchment outline. A unit square with a square hole in it, so that what
 # is inside and what is not is arithmetic rather than a judgement.
 # --------------------------------------------------------------------------
@@ -452,13 +372,6 @@ def test_mesh_map_without_an_outline_draws_the_whole_mesh():
     surface = uc1.mesh_map(ax, nodes, rng.normal(size=30))
     assert surface.get_clip_path() is None
     plt.close(figure)
-
-
-def test_load_seasonal_eo_pairs_values_with_seasons(tmp_path):
-    path = tmp_path / "eo.csv"
-    np.savetxt(path, np.array([-0.5, -0.7, -0.6]), delimiter=",")
-    series = uc1.load_seasonal_eo(path, [2014, 2015, 2016])
-    assert list(series.index) == [2014, 2015, 2016]
 
 
 # --------------------------------------------------------------------------

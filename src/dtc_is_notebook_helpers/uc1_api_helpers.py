@@ -1,10 +1,10 @@
 """
 Use Case 1 - running the deployed modules through the DTC Query API.
 
-The notebook can fit the GRF and FTS modules locally, which needs R and INLA,
-or it can submit them as jobs to the deployed workflow. This module is the
-second route. Each call returns the path of the output the workflow wrote,
-which the next step takes as its input.
+Everything the notebook needs comes from here: the published datasets, through
+the data download endpoint, and the fitted fields and curve coefficients, by
+submitting the GRF and FTS modules as jobs. Each call returns the path of the
+output the workflow wrote, which the next step takes as its input.
 
 A token is required. Generate one at
 https://query.dtc-ice-sheets.org/auth/get-token and set it as
@@ -28,7 +28,7 @@ from dtc_query_client.models.job_status import JobStatus
 
 logger = logging.getLogger(__name__)
 
-#: A sink for progress lines, as in `uc1_chain_helpers`.
+#: A sink for progress lines, so a caller can route them where it likes.
 Progress = Callable[[str], None]
 
 #: Where the deployed Query API lives.
@@ -43,10 +43,49 @@ MAX_JOB_MISSING_DELAY = 300
 #: The key each module's output path sits under in a finished job.
 GRF_OUTPUT_KEY = "grf-module"
 FTS_OUTPUT_KEY = "main"
+DOWNLOAD_OUTPUT_KEY = "main"
+
+#: The gap-filled gauge series. The measurement-only record, which has holes in
+#: it, sits beside it under a ``measured_`` prefix.
+DISCHARGE_VARIABLE = "water_volume_transport_in_river_channel"
+
+#: The spatial filter the download endpoint requires. Every Use Case 1
+#: collection covers the Watson catchment and nothing else, so there is nothing
+#: for a tighter polygon to select; this one is here to satisfy the endpoint.
+WHOLE_WORLD = {
+    "type": "Polygon",
+    "coordinates": [[[-180.0, -90.0], [180.0, -90.0], [180.0, 90.0],
+                     [-180.0, 90.0], [-180.0, -90.0]]],
+}
 
 
 class JobFailedError(RuntimeError):
     """A submitted job finished in a state other than succeeded."""
+
+
+def open_store(path: str) -> "object":
+    """
+    Open a GeoZarr the workflow wrote.
+
+    Parameters
+    ----------
+    path : str
+        Location of the store, as a job's output gives it.
+
+    Returns
+    -------
+    xarray.Dataset
+        The store as written.
+    """
+    import xarray as xr
+
+    try:
+        return xr.open_zarr(path, consolidated=True)
+    except (KeyError, ValueError):
+        # Stores written by older converter versions carry no consolidated
+        # metadata. Reading them is slower but otherwise identical.
+        logger.debug("%s has no consolidated metadata", path)
+        return xr.open_zarr(path, consolidated=False)
 
 
 def _configuration() -> dtc_query_client.configuration.Configuration:
@@ -194,6 +233,167 @@ async def run_fts_job(data_path: str, curve_time_points: int = 5, num_pca: int =
     return path
 
 
+async def download_dataset(dataset_id: str, start_date: str = "2006-01-01",
+                           end_date: str = "2026-01-01",
+                           variables: "list[str] | None" = None,
+                           polygon: "dict | None" = None,
+                           progress: Progress = print) -> str:
+    """
+    Fetch one published dataset through the Query API's download endpoint.
+
+    Parameters
+    ----------
+    dataset_id : str
+        A Use Case 1 collection, e.g. ``UC1_WATSON_DISCHARGE_GAUGE``.
+    start_date, end_date : str, optional
+        Time window, as ISO dates. The default spans the whole record.
+    variables : list of str, optional
+        Variables to fetch. All of them by default.
+    polygon : dict, optional
+        GeoJSON polygon in EPSG:4326. :data:`WHOLE_WORLD` by default.
+    progress : callable, optional
+        Called with a line of progress.
+
+    Returns
+    -------
+    str
+        Path of the GeoZarr the endpoint wrote.
+    """
+    configuration = _configuration()
+    async with dtc_query_client.api_client.ApiClient(configuration) as api_client:
+        api = dtc_query_client.api.GenericApi(api_client)
+        request = dtc_query_client.models.DataDownloadRequest(
+            dataset_id=dataset_id,
+            start_time=start_date,
+            end_time=end_date,
+            # from_dict rather than the plain dict: the field is a one-of
+            # wrapper, and handing it a dict leaves it unbound.
+            epsg4326_polygon_json=dtc_query_client.models.Epsg4326PolygonJson.from_dict(
+                polygon or WHOLE_WORLD),
+            variables=variables,
+        )
+        progress(f"download: submitting {dataset_id} ...")
+        submitted = await api.download_data(request)
+        progress(f"download: job {submitted.job_id}, waiting")
+        path = await _await_job(api_client, submitted.job_id,
+                                DOWNLOAD_OUTPUT_KEY, "download")
+    progress("download: done")
+    return path
+
+
+async def discharge_series(start_date: str = "2006-01-01", end_date: str = "2026-01-01",
+                           measured_only: bool = False,
+                           progress: Progress = print) -> "object":
+    """
+    Fetch the Watson gauge record as a daily series in cubic metres per second.
+
+    Parameters
+    ----------
+    start_date, end_date : str, optional
+        Time window, as ISO dates.
+    measured_only : bool, optional
+        True for the pressure-transducer record without its gap filling. The
+        default is the gap-filled series, which is what the use case models.
+    progress : callable, optional
+        Called with a line of progress.
+
+    Returns
+    -------
+    pandas.Series
+        Discharge in m3 s-1, indexed by date, with gaps kept as NaN.
+    """
+    import numpy as np
+    import pandas as pd
+
+    name = f"measured_{DISCHARGE_VARIABLE}" if measured_only else DISCHARGE_VARIABLE
+    path = await download_dataset("UC1_WATSON_DISCHARGE_GAUGE", start_date, end_date,
+                                  variables=[name], progress=progress)
+    progress("download: reading the gauge record back")
+    ds = open_store(path)
+    values = np.asarray(ds[name].values, dtype=float).ravel()
+    series = pd.Series(values, index=pd.DatetimeIndex(ds["time"].values),
+                       name="discharge_m3s").sort_index()
+    progress(f"gauge: {len(series)} days, {series.index.min():%Y-%m-%d} to "
+             f"{series.index.max():%Y-%m-%d}")
+    return series
+
+
+def linear_scale(frame: "object", variable: str) -> "object":
+    """
+    Undo the log10 the published collections are stored on, where they are.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        Values as the store holds them.
+    variable : str
+        The variable's name, which is what says whether it is a log.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The values on their linear scale, or the input unchanged.
+    """
+    return 10.0 ** frame if variable.startswith("log10_") else frame
+
+
+async def published_fields(dataset_id: str, start_date: str = "2006-01-01",
+                           end_date: str = "2026-01-01",
+                           variable: "str | None" = None,
+                           progress: Progress = print) -> dict:
+    """
+    Fetch one published collection and read its field back as a table.
+
+    Parameters
+    ----------
+    dataset_id : str
+        A Use Case 1 collection, e.g. ``UC1_WATSON_LAKE_INTENSITY``.
+    start_date, end_date : str, optional
+        Time window, as ISO dates.
+    variable : str, optional
+        Which variable to read. By default the only one that varies in space
+        as well as time, which is what every input collection holds.
+    progress : callable, optional
+        Called with a line of progress.
+
+    Returns
+    -------
+    dict
+        ``path`` where the download was written, ``fields`` a frame of
+        timestamps by position on the variable's linear scale, and
+        ``variable`` the name it was read from.
+
+    Raises
+    ------
+    ValueError
+        If the store holds no variable that varies in space and time.
+    """
+    import numpy as np
+    import pandas as pd
+
+    path = await download_dataset(dataset_id, start_date, end_date, progress=progress)
+    progress("download: reading the field back")
+    ds = open_store(path)
+    if variable is None:
+        spatial = [str(name) for name, array in ds.data_vars.items()
+                   if "time" in array.dims and len(array.dims) > 1]
+        if not spatial:
+            raise ValueError(
+                f"{dataset_id} holds no variable that varies in space and time. "
+                f"It holds: {', '.join(sorted(str(v) for v in ds.data_vars)) or 'nothing'}",
+            )
+        variable = spatial[0]
+
+    array = ds[variable]
+    positions = [str(dimension) for dimension in array.dims if dimension != "time"]
+    flattened = array.stack(position=positions) if len(positions) > 1 else array
+    frame = pd.DataFrame(
+        np.asarray(flattened.transpose("time", ...).values, dtype=float),
+        index=pd.DatetimeIndex(ds["time"].values))
+    progress(f"download: {frame.shape[0]} timesteps over {frame.shape[1]} cells")
+    return {"path": path, "fields": linear_scale(frame, variable), "variable": variable}
+
+
 async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
                      end_date: str = "2026-01-01", grid_res_x: int = 100,
                      grid_res_y: int = 100, progress: Progress = print) -> dict:
@@ -221,20 +421,18 @@ async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
     dict
         ``path`` the job's output location, ``fields`` a frame of timestamps by
         grid cell on the variable's own scale, ``uncertainty`` the matching
-        posterior standard deviations or None, ``points`` an (n, 2) array of
-        cell coordinates, and ``variable`` the name the module gave the field.
+        posterior standard deviations or None, ``uncertainty_mean`` the spread
+        of the spatial mean itself, one value per timestep, or None,
+        ``points`` an (n, 2) array of cell coordinates, and ``variable`` the
+        name the module gave the field.
     """
     import numpy as np
     import pandas as pd
-    import xarray as xr
 
     path = await run_grf_job(dataset_name, start_date, end_date,
                              grid_res_x, grid_res_y, progress=progress)
     progress("GRF: reading the fitted field back")
-    try:
-        ds = xr.open_zarr(path, consolidated=True)
-    except (KeyError, ValueError):
-        ds = xr.open_zarr(path, consolidated=False)
+    ds = open_store(path)
 
     gridded = [str(name) for name, array in ds.data_vars.items()
                if set(array.dims) >= {"time", "x", "y"}]
@@ -260,15 +458,25 @@ async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
     if f"{variable}_uncertainty" in ds.data_vars:
         uncertainty, _ = table(f"{variable}_uncertainty")
 
+    # The spread of the spatial mean is taken from the joint posterior by the
+    # module itself, and is not the same as collapsing the per-cell spreads,
+    # which assumes they are independent. It carries no spatial dimension, so
+    # it comes back as a series rather than through `table`.
+    uncertainty_mean = None
+    if f"{variable}_uncertainty_mean" in ds.data_vars:
+        uncertainty_mean = pd.Series(
+            np.asarray(ds[f"{variable}_uncertainty_mean"].values, dtype=float).ravel(),
+            index=pd.DatetimeIndex(ds["time"].values))
+
     # The runoff collections are stored as log10. The rest of the chain works
     # in the linear quantity, so undo it here; the posterior spread stays in
     # log10 units, which is the form `uc1_hydro_helpers.seasonal_sd` expects.
-    if variable.startswith("log10_"):
-        fields = 10.0 ** fields
+    fields = linear_scale(fields, variable)
 
     progress(f"GRF: {fields.shape[0]} timesteps over {fields.shape[1]} grid cells")
     return {"path": path, "fields": fields, "uncertainty": uncertainty,
-            "points": points, "variable": variable}
+            "uncertainty_mean": uncertainty_mean, "points": points,
+            "variable": variable}
 
 
 async def fts_coefficients(data_path: str, curve_time_points: int = 5, num_pca: int = 2,
@@ -305,19 +513,25 @@ async def fts_coefficients(data_path: str, curve_time_points: int = 5, num_pca: 
     """
     import numpy as np
     import pandas as pd
-    import xarray as xr
 
     path = await run_fts_job(data_path, curve_time_points, num_pca,
                              num_factors, forecast_horizon, progress=progress)
     progress("FTS: reading the coefficients back")
-    try:
-        ds = xr.open_zarr(path, consolidated=True)
-    except (KeyError, ValueError):
-        ds = xr.open_zarr(path, consolidated=False)
+    ds = open_store(path)
 
     held = {str(name): tuple(array.dims) for name, array in ds.data_vars.items()}
     two_d = [name for name, dims in held.items() if len(dims) == 2]
     one_d = [name for name, dims in held.items() if len(dims) == 1]
+
+    # The module analyses every spatial variable it is given, and the GRF
+    # output carries the posterior spread alongside the field itself, so the
+    # store normally holds a set of coefficients for each. The ones wanted here
+    # are the field's: curves fitted to the spread describe a different
+    # quantity, and nothing in the name says so.
+    if len(two_d) > 1:
+        fields = [name for name in two_d if not name.endswith("_uncertainty")]
+        if fields:
+            two_d = fields
 
     if len(two_d) == 1:
         name = two_d[0]

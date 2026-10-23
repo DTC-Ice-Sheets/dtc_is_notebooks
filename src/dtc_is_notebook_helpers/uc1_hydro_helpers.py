@@ -44,108 +44,8 @@ Years = Sequence[int] | np.ndarray | pd.Index
 MELT_MONTHS = (5, 6, 7, 8, 9)
 MELT_START_DOY = 121          # 1 May
 MELT_END_DOY = 274            # 30 September
-MISSING = -9999.0
 SECONDS_PER_DAY = 86400.0
 M3S_TO_KM3_PER_DAY = SECONDS_PER_DAY / 1e9
-
-
-# --------------------------------------------------------------------------
-# Loading
-# --------------------------------------------------------------------------
-
-def load_discharge(source: str | Path, column: int | None = None) -> pd.Series:
-    """Daily Watson discharge in m3/s, indexed by date.
-
-    Accepts either the DTC bucket CSV that the original notebook reads
-    (`WatsonDischarge2006_2025.csv`, gap-filled series in column 7) or the raw
-    tab-separated GEUS Dataverse file. The gap-filled series is the one to use:
-    the measurement-only column looks similar and has holes in it.
-    """
-    text = str(source)
-    if text.endswith(".txt"):
-        return _load_geus(Path(source))
-
-    frame = pd.read_csv(text)
-    if column is None:
-        column = 7
-    values = pd.to_numeric(frame.iloc[:, column], errors="coerce")
-
-    lower = {str(c).strip().lower(): c for c in frame.columns}
-    if {"year", "month", "day"} <= set(lower):
-        index = pd.to_datetime({
-            "year": frame[lower["year"]].astype(int),
-            "month": frame[lower["month"]].astype(int),
-            "day": frame[lower["day"]].astype(int)})
-    else:
-        # No date columns: the file is one row per day from 1 January 2006.
-        index = pd.date_range("2006-01-01", periods=len(values), freq="D")
-
-    series = pd.Series(values.to_numpy(), index=index, name="discharge_m3s")
-    return series.mask(series == MISSING).sort_index()
-
-
-def _load_geus(path: Path) -> pd.Series:
-    """Read the raw GEUS Dataverse export, tab separated with a named header."""
-    header = path.read_text(errors="ignore").split("\n", 1)[0].split("\t")
-    columns = {name.strip().lower(): i for i, name in enumerate(header)}
-    year_col = columns["year"]
-    month_col = next(i for n, i in columns.items() if "month" in n)
-    day_col = next(i for n, i in columns.items() if n.strip() in ("day", "dayofmonth"))
-    flux_col = next(i for n, i in columns.items()
-                    if "divers" in n and "temperature" in n)
-
-    table = np.genfromtxt(path, delimiter="\t", skip_header=1,
-                          usecols=(year_col, month_col, day_col, flux_col))
-    year, month, day, flux = table.T
-    valid = np.isfinite(flux) & (flux != MISSING)
-    index = pd.to_datetime({"year": year[valid].astype(int),
-                            "month": month[valid].astype(int),
-                            "day": day[valid].astype(int)})
-    return pd.Series(flux[valid], index=index, name="discharge_m3s").sort_index()
-
-
-def load_grf_matrix(source: str | Path, start_year: int,
-                    log10: bool = True) -> pd.DataFrame:
-    """`run_grf_batch.py` output as a (time x mesh node) frame.
-
-    The matrix is mesh nodes by monthly snapshots with no dates attached, so
-    the caller supplies the first melt season. Five months a season, May to
-    September.
-    """
-    matrix = np.loadtxt(source, delimiter=",")
-    values = np.power(10.0, matrix) if log10 else matrix
-    n_seasons = values.shape[1] // len(MELT_MONTHS)
-    stamps = [pd.Timestamp(year=start_year + s, month=m, day=1)
-              for s in range(n_seasons) for m in MELT_MONTHS]
-    return pd.DataFrame(values[:, :len(stamps)].T, index=pd.DatetimeIndex(stamps))
-
-
-def load_seasonal_eo(source: str | Path, years: Years) -> pd.Series:
-    """CryoSat-2 seasonal elevation change, catchment mean, one value a season.
-
-    The matrix is mesh nodes by seasons, already harmonised by GRF. Values are
-    metres of surface lowering over the melt season, so they are negative in
-    almost every year and are never log-transformed.
-    """
-    matrix = np.loadtxt(source, delimiter=",")
-    return pd.Series(np.nanmean(matrix, axis=0), index=list(years),
-                     name="elevation_change")
-
-
-def load_coefficients(source: str | Path) -> pd.DataFrame:
-    """FTS coefficients as written by `model.coeff()` - one row per season.
-
-    The cache is written with a row index, so read it back as one. Without
-    this the index column is taken as data and every factor shifts one place
-    right, which is silent and changes the answer: a cached run then has the
-    row numbers 0, 1, 2 ... in place of the first factor.
-    """
-    frame = pd.read_csv(source)
-    if str(frame.columns[0]).startswith("Unnamed"):
-        frame = frame.set_index(frame.columns[0])
-        frame.index.name = None
-    frame.columns = [f"factor_{i + 1}" for i in range(frame.shape[1])]
-    return frame
 
 
 # --------------------------------------------------------------------------
@@ -527,50 +427,18 @@ def steps_above(profiles: pd.DataFrame, threshold_m3s: float) -> pd.Series:
 class Scenario:
     """A future seasonal-predictor distribution to run the model over.
 
-    Two ways to build one:
-
-    `from_projection` - the real case. Point it at an extracted 2050 MAR or
-    RACMO run, processed exactly like the historical forcing, and it returns
-    the seasonal predictor values those years imply. The model, fitted on the
-    observed period, is then applied forward.
-
-    `from_perturbation` - the stand-in until those runs are reachable. It
-    reshapes the observed predictor distribution: `weight` slides the centre
-    between the driest and wettest observed seasons, `variability` widens or
-    narrows the spread. This mirrors the controls in the original demonstrator.
+    `from_perturbation` reshapes the observed predictor distribution: `weight`
+    slides the centre between the driest and wettest observed seasons, and
+    `variability` widens or narrows the spread. This mirrors the controls in the
+    original demonstrator, and stands in until projection runs are published as
+    collections of their own - at which point they are fitted by the GRF module
+    like any other forcing, and need no separate route in here.
     """
 
     name: str
     values: pd.Series
     notes: str = field(default="")
 
-    @classmethod
-    def from_projection(cls, name: str, source: str | Path, start_year: int,
-                        notes: str = "", **kwargs: object) -> "Scenario":
-        """
-        Build a scenario from an extracted projection on disk.
-
-        Parameters
-        ----------
-        name : str
-            Label for the scenario.
-        source : str or pathlib.Path
-            The fitted matrix to read.
-        start_year : int
-            First season in the matrix.
-        notes : str, optional
-            A line describing where the scenario came from.
-        **kwargs : object
-            Passed through to :func:`load_grf_matrix`.
-
-        Returns
-        -------
-        Scenario
-            The scenario, ready to run.
-        """
-        fields = load_grf_matrix(source, start_year, **kwargs)
-        return cls(name, seasonal_predictor(catchment_mean(fields)),
-                   notes or f"extracted projection, {source}")
 
     @classmethod
     def from_perturbation(cls, name: str, observed: pd.Series, weight: float = 0.5,
