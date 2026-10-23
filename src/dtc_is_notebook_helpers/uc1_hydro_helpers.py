@@ -153,12 +153,24 @@ def load_coefficients(source: str | Path) -> pd.DataFrame:
 # --------------------------------------------------------------------------
 
 def catchment_mean(fields: pd.DataFrame, weights: np.ndarray | None = None) -> pd.Series:
-    """Collapse a (time x node) frame to one value per time step."""
+    """Collapse a (time x node) frame to one value per time step.
+
+    Columns carrying no weight are dropped before the average rather than
+    multiplied by zero. On a mesh every node holds a value and the two are the
+    same, but a field interpolated onto a regular grid is undefined outside the
+    mesh, and NaN times zero is still NaN, which would take the whole average
+    with it.
+    """
     if weights is None:
         series = fields.mean(axis=1)
     else:
         w = np.asarray(weights, dtype=float)
-        series = pd.Series(fields.to_numpy() @ (w / w.sum()), index=fields.index)
+        keep = w > 0.0
+        if not keep.any():
+            raise ValueError("no column carries any weight, so there is nothing to average")
+        kept = w[keep]
+        series = pd.Series(fields.to_numpy()[:, keep] @ (kept / kept.sum()),
+                           index=fields.index)
     return series.rename("runoff")
 
 

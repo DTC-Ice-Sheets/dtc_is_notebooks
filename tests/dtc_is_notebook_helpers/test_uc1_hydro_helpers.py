@@ -496,3 +496,26 @@ def test_season_shape_profiles_returns_an_observed_predicted_frame(discharge):
     assert set(out.columns.get_level_values(0)) == {"observed", "predicted"}
     assert len(out) > 0
     assert uc1.profile_skill(out)["r2"] > 0.5
+
+
+def test_catchment_mean_ignores_columns_with_no_weight():
+    # A field interpolated onto a grid is undefined outside the mesh. Those
+    # columns carry no weight, and must not take the average with them.
+    frame = pd.DataFrame([[1.0, 3.0, np.nan], [2.0, 4.0, np.nan]])
+    weights = np.array([1.0, 1.0, 0.0])
+
+    series = uc1.catchment_mean(frame, weights)
+
+    np.testing.assert_allclose(series.to_numpy(), [2.0, 3.0])
+
+
+def test_catchment_mean_keeps_a_missing_value_that_does_carry_weight():
+    # A gap inside the catchment is a real gap and should stay visible.
+    frame = pd.DataFrame([[1.0, np.nan]])
+    series = uc1.catchment_mean(frame, np.array([1.0, 1.0]))
+    assert np.isnan(series.to_numpy()[0])
+
+
+def test_catchment_mean_refuses_weights_that_are_all_zero():
+    with pytest.raises(ValueError, match="nothing to average"):
+        uc1.catchment_mean(pd.DataFrame([[1.0, 2.0]]), np.zeros(2))
