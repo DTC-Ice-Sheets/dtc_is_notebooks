@@ -269,3 +269,74 @@ async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
     progress(f"GRF: {fields.shape[0]} timesteps over {fields.shape[1]} grid cells")
     return {"path": path, "fields": fields, "uncertainty": uncertainty,
             "points": points, "variable": variable}
+
+
+async def fts_coefficients(data_path: str, curve_time_points: int = 5, num_pca: int = 2,
+                           num_factors: int = 3, forecast_horizon: int = 3,
+                           progress: Progress = print) -> dict:
+    """
+    Run an FTS job and read its coefficients back as one row per curve.
+
+    The module writes its coefficients as a GeoZarr. The layout is read from
+    the store rather than assumed: a single two-dimensional variable is taken
+    as curves by factors, and several equal-length one-dimensional variables
+    are taken as one factor each.
+
+    Parameters
+    ----------
+    data_path : str
+        Output of a GRF job.
+    curve_time_points, num_pca, num_factors, forecast_horizon : int, optional
+        Passed to the module. See :func:`run_fts_job`.
+    progress : callable, optional
+        Called with a line of progress.
+
+    Returns
+    -------
+    dict
+        ``path`` the job's output location, ``coefficients`` a frame of curves
+        by factor, and ``layout`` a line describing how the store was read.
+
+    Raises
+    ------
+    ValueError
+        If the store holds nothing that can be read as coefficients. The
+        message names what it does hold.
+    """
+    import numpy as np
+    import pandas as pd
+    import xarray as xr
+
+    path = await run_fts_job(data_path, curve_time_points, num_pca,
+                             num_factors, forecast_horizon, progress=progress)
+    progress("FTS: reading the coefficients back")
+    try:
+        ds = xr.open_zarr(path, consolidated=True)
+    except (KeyError, ValueError):
+        ds = xr.open_zarr(path, consolidated=False)
+
+    held = {str(name): tuple(array.dims) for name, array in ds.data_vars.items()}
+    two_d = [name for name, dims in held.items() if len(dims) == 2]
+    one_d = [name for name, dims in held.items() if len(dims) == 1]
+
+    if len(two_d) == 1:
+        name = two_d[0]
+        values = np.asarray(ds[name].values, dtype=float)
+        # Curves are the longer axis; factors are few.
+        if values.shape[0] < values.shape[1]:
+            values = values.T
+        frame = pd.DataFrame(
+            values, columns=[f"factor_{i + 1}" for i in range(values.shape[1])])
+        layout = f"read {name} with dims {held[name]} as curves by factor"
+    elif len(one_d) > 1 and len({ds[name].size for name in one_d}) == 1:
+        frame = pd.DataFrame({f"factor_{i + 1}": np.asarray(ds[name].values, dtype=float)
+                              for i, name in enumerate(sorted(one_d))})
+        layout = f"stacked {len(one_d)} one-dimensional variables: {', '.join(sorted(one_d))}"
+    else:
+        raise ValueError(
+            "the FTS output holds nothing that reads as coefficients. It holds: "
+            + "; ".join(f"{name} {dims}" for name, dims in held.items()),
+        )
+
+    progress(f"FTS: {frame.shape[1]} coefficients for each of {frame.shape[0]} curves")
+    return {"path": path, "coefficients": frame, "layout": layout}
