@@ -950,6 +950,34 @@ def basin_path(rings: list[np.ndarray], scale: float = 1.0) -> "object":
           for ring in rings])
 
 
+def mesh_edges(ax: "object", vertices: np.ndarray, triangles: np.ndarray,
+               rings: list[np.ndarray] | None = None, colour: str = "white",
+               alpha: float = 0.55) -> "object":
+    """Draw a mesh's triangulation over whatever is already on the axes.
+
+    `mesh_map` draws a field and can draw the triangulation with it, but only
+    where the field sits on the mesh itself. A field returned by the deployed
+    module arrives interpolated onto a regular grid, and the mesh is still
+    worth showing: the fit was done on it, and the detail in the colour is
+    interpolation between its nodes rather than measurement.
+
+    Coordinates are divided by a thousand, to match `mesh_map`.
+    """
+    import matplotlib.tri as mtri
+    from matplotlib.patches import PathPatch
+
+    xy = np.asarray(vertices, dtype=float)[:, :2] / 1000.0
+    triangulation = mtri.Triangulation(xy[:, 0], xy[:, 1],
+                                       np.asarray(triangles, dtype=int))
+    drawn = ax.triplot(triangulation, color=colour, lw=0.35, alpha=alpha, zorder=3)
+    if rings:
+        path = basin_path(rings, scale=1 / 1000.0)
+        for artist in drawn:
+            artist.set_clip_path(PathPatch(path, transform=ax.transData,
+                                           facecolor="none", edgecolor="none"))
+    return drawn
+
+
 def mesh_map(ax: "object", vertices: np.ndarray, values: np.ndarray,
              rings: list[np.ndarray] | None = None,
              triangles: np.ndarray | None = None, cmap: object = "viridis",
