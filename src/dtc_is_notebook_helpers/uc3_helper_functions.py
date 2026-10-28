@@ -1170,7 +1170,8 @@ def plot_change_detection(
     fig = go.Figure()
 
     # Find the start index of each run of identical labels
-    starts = [0] + [i for i in range(1, n) if change_regions[i] != change_regions[i - 1]]
+    starts = [0] if n else []
+    starts += [i for i in range(1, n) if change_regions[i] != change_regions[i - 1]]
     ends = starts[1:] + [n]  # exclusive
 
     for k, (s, e) in enumerate(zip(starts, ends, strict=False)):
