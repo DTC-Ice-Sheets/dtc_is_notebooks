@@ -52,18 +52,6 @@ class LoadedButton(widgets.Button):
     """A button that can hold a value as an attribute."""
 
     def __init__(self: LoadedButton, value: object = None, *args: object, **kwargs: object) -> None:
-        """
-        Initialize the button with an attached value trait.
-
-        Parameters
-        ----------
-        value : any, optional
-            Initial value stored on the button, by default None.
-        *args
-            Positional arguments forwarded to ``widgets.Button``.
-        **kwargs
-            Keyword arguments forwarded to ``widgets.Button``.
-        """
         super(LoadedButton, self).__init__(*args, **kwargs)
         self.add_traits(value=traitlets.Any(value))
 
@@ -846,9 +834,9 @@ def customwrap(s: str, width: int = 16, separator: str = "<br>") -> str:
     ----------
     s : str
         String to wrap.
-    width : int, optional
+    width : int
         Maximum line width in characters. Default is 16.
-    separator : str, optional
+    separator : str
         String to use for line breaks. Default is "<br>".
 
     Returns
@@ -873,6 +861,10 @@ def plot_covariate_analysis(
         Dictionary containing variable data, histograms, and covariate statistics.
     analysis_type : CovariateAnalysisType
         Type of analysis to determine which statistics to display.
+    plot_height : int
+        Height of the plot in pixels. Default is 1000.
+    plot_width : int
+        Width of the plot in pixels. Default is 1000.
 
     Returns
     -------
@@ -1014,6 +1006,8 @@ def plot_timeseries_data(timeseries_data: dict, pretty_labels: bool = True) -> g
     ----------
     timeseries_data : dict
         Dictionary containing variable names and their corresponding time series values.
+    pretty_labels : bool
+        Whether to use pretty labels for the variables. Default is True.
 
     Returns
     -------
@@ -1106,31 +1100,86 @@ def plot_power_law_results(x_pred: np.array, model_fit: dict) -> go.Figure:
     return fig
 
 
+def edge(i: int, t: pd.Series, n: int) -> pd.Timestamp:
+    """Return the timestamp at an indexed boundary.
+
+    Parameters
+    ----------
+    i : int
+        Provide the boundary index to convert to a timestamp.
+    t : pd.Series
+        Provide the ordered timestamps.
+    n : int
+        Provide the number of timestamps in ``t``.
+
+    Returns
+    -------
+    pd.Timestamp
+        Return the first or last timestamp for an outer boundary, or the midpoint
+        between adjacent timestamps for an interior boundary.
+    """
+    if i <= 0:
+        return t.iloc[0]
+    if i >= n:
+        return t.iloc[-1]
+    return t.iloc[i - 1] + (t.iloc[i] - t.iloc[i - 1]) / 2
+
+
 def plot_change_detection(
     timestamps: list,
     values: list,
     anomalies: list,
-    change_points: list,
+    change_regions: list,
     title: str = "",
-    shade_colours: tuple[str, ...] = ("white", "rgba(200, 200, 200, 0.45)"),
+    x_label: str = "",
+    y_label: str = "",
+    shade_colours: tuple[str, ...] = ("lightgrey", "rgba(200, 200, 200, 0.45)"),
 ) -> go.Figure:
-    t = pd.to_datetime(pd.Series(timestamps))
+    """Plot a time series, mark anomalies, and shade change regions.
+
+    Parameters
+    ----------
+    timestamps : list
+        Provide timestamps corresponding to the observations.
+    values : list
+        Provide the observations to plot.
+    anomalies : list
+        Provide boolean flags identifying anomalous observations.
+    change_regions : list
+        Provide region labels used to determine where the background shading changes.
+    title : str
+        Provide the figure title.
+    x_label : str
+        Provide the x-axis label.
+    y_label : str
+        Provide the y-axis label.
+    shade_colours : tuple[str, ...]
+        Provide colours to cycle through when shading consecutive regions.
+
+    Returns
+    -------
+    go.Figure
+        Return a figure containing the time series, anomaly markers, and shaded regions.
+    """
+    t = pd.to_datetime(pd.Series(timestamps)).reset_index(drop=True)
     y = np.asarray(values, dtype=float)
     anom = np.asarray(anomalies).astype(bool)
+    change_regions = np.asarray(change_regions)
     n = len(t)
 
     fig = go.Figure()
 
-    # Alternating background shading, one rect per region.
-    # Region k runs from boundary k to boundary k+1; the last ends at the final timestamp.
-    boundaries = [0] + sorted(int(i) for i in change_points) + [n - 1]
-    for k, (start, end) in enumerate(zip(boundaries[:-1], boundaries[1:])):
+    # Find the start index of each run of identical labels
+    starts = [0] + [i for i in range(1, n) if change_regions[i] != change_regions[i - 1]]
+    ends = starts[1:] + [n]  # exclusive
+
+    for k, (s, e) in enumerate(zip(starts, ends, strict=False)):
         fig.add_shape(
             type="rect",
             xref="x",
             yref="paper",
-            x0=t.iloc[start],
-            x1=t.iloc[end],
+            x0=edge(s, t, n),
+            x1=edge(e, t, n),
             y0=0,
             y1=1,
             fillcolor=shade_colours[k % len(shade_colours)],
@@ -1140,7 +1189,7 @@ def plot_change_detection(
 
     # Main series
     fig.add_trace(
-        go.Scatter(x=t, y=y, mode="lines+markers", name="Value", line=dict(color="royalblue"), marker=dict(size=5))
+        go.Scatter(x=t, y=y, mode="lines+markers", name="Value", line={"color": "royalblue"}, marker={"size": 5})
     )
 
     # Anomalies as red crosses
@@ -1150,14 +1199,14 @@ def plot_change_detection(
             y=y[anom],
             mode="markers",
             name="Anomaly",
-            marker=dict(symbol="x", color="red", size=11, line=dict(width=2)),
+            marker={"symbol": "circle", "color": "red", "size": 11, "line": {"width": 2}},
         )
     )
 
     fig.update_layout(
         title=title,
-        xaxis_title="Time",
-        yaxis_title="Value",
+        xaxis_title=x_label,
+        yaxis_title=y_label,
         plot_bgcolor="white",
         hovermode="x unified",
     )
