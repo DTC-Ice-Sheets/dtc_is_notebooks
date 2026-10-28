@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 import ipywidgets as widgets
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import pytz
@@ -1044,4 +1045,62 @@ def plot_timeseries_data(timeseries_data: dict, pretty_labels: bool = True) -> g
         width=800,
     )
 
+    return fig
+
+
+def predict_power_law(x: np.ndarray, model: dict) -> np.ndarray:
+    """
+    Predict values from a fitted power-law model.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Provide the independent variable values at which to predict.
+    model : dict
+        Provide fitted model parameters with ``a`` and ``b`` keys.
+
+    Returns
+    -------
+    np.ndarray
+        Return predictions calculated as ``a * x**b``.
+
+    Raises
+    ------
+    ValueError
+        Raise when any input ``x`` value is negative.
+    """
+    arr = np.asarray(x, float)
+    if np.any(arr < 0):
+        raise ValueError("x must be >= 0 for a power law")
+    return model["a"] * arr ** model["b"]
+
+
+def plot_power_law_results(x_pred: np.array, model_fit: dict) -> go.Figure:
+    """Plot observed data and fitted power-law predictions.
+
+    Parameters
+    ----------
+    x_pred : np.array
+        Provide independent-variable values at which to evaluate the model.
+    model_fit : dict
+        Provide observed ``x`` and ``y`` values and fitted parameters ``a`` and ``b``.
+
+    Returns
+    -------
+    go.Figure
+        Return a figure showing the observed data and predicted power-law fit.
+    """
+    y_pred = predict_power_law(x_pred, model_fit)
+    x = np.asarray(model_fit["x"], float)
+    y = np.asarray(model_fit["y"], float)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name="Data"))
+    fig.add_trace(go.Scatter(x=x_pred, y=y_pred, mode="lines", name="Power Law Fit"))
+    fig.update_layout(
+        xaxis_title=r"$\text{Subglacial Lake Discharge } (\mathrm{m^{3}\,s^{-1}})$",
+        yaxis_title="Basal Melt Anomalies (m)",
+        height=600,
+        width=800,
+    )
     return fig
