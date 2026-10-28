@@ -1104,3 +1104,61 @@ def plot_power_law_results(x_pred: np.array, model_fit: dict) -> go.Figure:
         width=800,
     )
     return fig
+
+
+def plot_change_detection(
+    timestamps: list,
+    values: list,
+    anomalies: list,
+    change_points: list,
+    title: str = "",
+    shade_colours: tuple[str, ...] = ("white", "rgba(200, 200, 200, 0.45)"),
+) -> go.Figure:
+    t = pd.to_datetime(pd.Series(timestamps))
+    y = np.asarray(values, dtype=float)
+    anom = np.asarray(anomalies).astype(bool)
+    n = len(t)
+
+    fig = go.Figure()
+
+    # Alternating background shading, one rect per region.
+    # Region k runs from boundary k to boundary k+1; the last ends at the final timestamp.
+    boundaries = [0] + sorted(int(i) for i in change_points) + [n - 1]
+    for k, (start, end) in enumerate(zip(boundaries[:-1], boundaries[1:])):
+        fig.add_shape(
+            type="rect",
+            xref="x",
+            yref="paper",
+            x0=t.iloc[start],
+            x1=t.iloc[end],
+            y0=0,
+            y1=1,
+            fillcolor=shade_colours[k % len(shade_colours)],
+            line_width=0,
+            layer="below",
+        )
+
+    # Main series
+    fig.add_trace(
+        go.Scatter(x=t, y=y, mode="lines+markers", name="Value", line=dict(color="royalblue"), marker=dict(size=5))
+    )
+
+    # Anomalies as red crosses
+    fig.add_trace(
+        go.Scatter(
+            x=t[anom],
+            y=y[anom],
+            mode="markers",
+            name="Anomaly",
+            marker=dict(symbol="x", color="red", size=11, line=dict(width=2)),
+        )
+    )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Time",
+        yaxis_title="Value",
+        plot_bgcolor="white",
+        hovermode="x unified",
+    )
+    return fig
