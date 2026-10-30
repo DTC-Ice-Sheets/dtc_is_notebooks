@@ -1,0 +1,72 @@
+name: Build and Release Colab Wheels
+
+on:
+  push:
+    # paths:
+    #   - 'pyproject.toml'
+    #   - 'poetry.lock'
+    #   - 'src/**'
+    # branches:
+    #   - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-wheels:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyPA build, Pip, and Poetry
+        run: |
+          python -m pip install --upgrade pip build poetry poetry-plugin-export
+
+      - name: Build local package wheel (PEP 517 via poetry-core)
+        run: |
+          mkdir -p wheels
+          python -m build --wheel --outdir wheels .
+
+      - name: Export dependencies from poetry.lock
+        run: |
+          poetry export -f requirements.txt \
+            --without dev \
+            --without-hashes \
+            --output wheels/requirements.txt
+
+      - name: Download pre-built wheels (strictly binary, no build backends)
+        run: |
+          python -m pip download \
+            --only-binary=:all: \
+            --dest wheels \
+            -r wheels/requirements.txt
+
+      - name: Bundle archive
+        run: |
+          zip -rq wheels.zip ./wheels
+
+      - name: Create or Update Release Asset (Tagged Release)
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: wheels.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+      - name: Update 'latest' Release on main push
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest
+          name: Latest Prebuilt Colab Wheels
+          files: wheels.zip
+          prerelease: false
