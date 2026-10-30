@@ -2,9 +2,9 @@ name: Build and Release venv wheels
 
 on:
   push:
-    paths:
-      - 'pyproject.toml'
-      - 'poetry.lock'
+    # paths:
+    #   - 'pyproject.toml'
+    #   - 'poetry.lock'
     branches:
       - main
   workflow_dispatch:
