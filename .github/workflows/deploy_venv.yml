@@ -2,9 +2,9 @@ name: Build and Release venv wheels
 
 on:
   push:
-    # paths:
-    #   - 'pyproject.toml'
-    #   - 'poetry.lock'
+    paths:
+      - 'pyproject.toml'
+      - 'poetry.lock'
     branches:
       - main
   workflow_dispatch:
@@ -65,7 +65,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          retention_days: 1
 
       - name: Update 'latest' Release on main push
         uses: softprops/action-gh-release@v3
@@ -75,4 +74,3 @@ jobs:
           name: Latest Prebuilt venv Wheels
           files: ${{ steps.name_container.outputs.wheel_archive }}
           prerelease: false
-          retention_days: 1
