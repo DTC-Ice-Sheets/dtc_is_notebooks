@@ -1,13 +1,12 @@
-name: Build and Release Colab Wheels
+name: Build and Release venv wheels
 
 on:
   push:
-    # paths:
-    #   - 'pyproject.toml'
-    #   - 'poetry.lock'
-    #   - 'src/**'
-    # branches:
-    #   - main
+    paths:
+      - 'pyproject.toml'
+      - 'poetry.lock'
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -24,7 +23,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
+
+      - name: Define wheel archive name
+        id: name_container
+        run: |
+          echo "wheel_archive=dtc_is_notebooks-wheels-3.13.zip" | awk '{print tolower($0)}' >> $GITHUB_OUTPUT
 
       - name: Install PyPA build, Pip, and Poetry
         run: |
@@ -51,22 +55,22 @@ jobs:
 
       - name: Bundle archive
         run: |
-          zip -rq wheels.zip ./wheels
+          zip -rq ${{ steps.name_container.outputs.wheel_archive }} ./wheels
 
       - name: Create or Update Release Asset (Tagged Release)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: wheels.zip
+          files: ${{ steps.name_container.outputs.wheel_archive }}
           draft: false
           prerelease: false
           generate_release_notes: true
 
       - name: Update 'latest' Release on main push
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: latest
-          name: Latest Prebuilt Colab Wheels
-          files: wheels.zip
+          name: Latest Prebuilt venv Wheels
+          files: ${{ steps.name_container.outputs.wheel_archive }}
           prerelease: false
