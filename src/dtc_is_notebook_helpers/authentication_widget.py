@@ -24,8 +24,8 @@ import json
 import os
 from typing import Any
 
-import ipywidgets as widgets
 import dtc_query_client
+import ipywidgets as widgets
 from dtc_query_client import ApiClient, ApiResponse, Configuration
 from dtc_query_client.exceptions import ApiException
 from ipykernel import version_info as kernel_version
@@ -37,22 +37,13 @@ from .cell_spinner import BusyIndicator
 
 API_HOST = "https://query.dtc-ice-sheets.org"
 TOKEN_URL = f"{API_HOST}/auth/get-token"
-TOKEN_ENV_VAR = "DTC_API_TOKEN"
+DTC_API_TOKEN_ENV_NAME = "DTC_API_TOKEN"  # noqa: S105 - this is the environment variable name, not the token itself.
 
 LABEL_HTML = (
     f'API token (<a href="{TOKEN_URL}" target="_blank" rel="noopener noreferrer" '
     'style="color:var(--jp-content-link-color,#1976d2);text-decoration:underline">login here</a>):'
 )
-PLACEHOLDER = "paste your API token here..."
-SUBMIT_TEXT = "Submit"
-EMPTY_TOKEN_MESSAGE = "Please paste an API token before submitting."
-CHECKING_MESSAGE = "Checking API token"
-VALID_TOKEN_MESSAGE = "✅ API token is valid. Please continue by running the next cell."
-INVALID_TOKEN_MESSAGE = "❌ API token not authenticated, please try again"
 CHECK_TIMEOUT_S = 5.0
-TIMEOUT_MESSAGE = (
-    f"The API did not respond within {CHECK_TIMEOUT_S:g} s, please try again"
-)
 
 
 async def check_api_token(client: ApiClient) -> ApiResponse:
@@ -77,9 +68,7 @@ async def check_api_token(client: ApiClient) -> ApiResponse:
     """
     api_instance = dtc_query_client.SeaLevelResponseApi(api_client=client)
     try:
-        return await api_instance.get_mass_balance_with_http_info(
-            "greenland", _request_timeout=CHECK_TIMEOUT_S
-        )
+        return await api_instance.get_mass_balance_with_http_info("greenland", _request_timeout=CHECK_TIMEOUT_S)
     except ApiException as e:
         if e.status is None:
             raise
@@ -123,14 +112,12 @@ class ApiTokenWidget(widgets.VBox):
 
     dtc_client: ApiClient | None = None
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **kwargs: Any) -> None:  # noqa: ANN401  # VBox accepts arbitrary trait options.
         self.label = widgets.HTML(value=LABEL_HTML)
         self.token_input = widgets.Text(
-            value="", placeholder=PLACEHOLDER, layout=widgets.Layout(width="400px")
+            value="", placeholder="paste your API token here...", layout=widgets.Layout(width="400px")
         )
-        self.submit_button = widgets.Button(
-            description=SUBMIT_TEXT, button_style="success"
-        )
+        self.submit_button = widgets.Button(description="Submit", button_style="success")
         self.status = BusyIndicator()
         self.token: str | None = None
         self._check_task: asyncio.Future | None = None
@@ -155,11 +142,7 @@ class ApiTokenWidget(widgets.VBox):
         if self._authenticated.is_set():
             return
         shell = get_ipython()
-        if (
-            shell is None
-            or getattr(shell, "kernel", None) is None
-            or kernel_version >= (7,)
-        ):
+        if shell is None or getattr(shell, "kernel", None) is None or kernel_version >= (7,):
             await self._authenticated.wait()
             return
 
@@ -176,7 +159,7 @@ class ApiTokenWidget(widgets.VBox):
         """Check the token in the input box, as if the "Submit" button had been pressed."""
         token = self.token_input.value.strip()
         if not token:
-            self.status.stop(EMPTY_TOKEN_MESSAGE)
+            self.status.stop("Please paste an API token before submitting.")
             return
 
         previous_client = self.dtc_client
@@ -196,13 +179,11 @@ class ApiTokenWidget(widgets.VBox):
         if previous_client is not None:
             await previous_client.close()
         try:
-            with self.status(
-                CHECKING_MESSAGE, disable=[self.token_input, self.submit_button]
-            ):
+            with self.status("Checking API token", disable=[self.token_input, self.submit_button]):
                 response = await check_api_token(self.dtc_client)
         except asyncio.TimeoutError:
             await self._discard_client()
-            self.status.stop(TIMEOUT_MESSAGE)
+            self.status.stop(f"The API did not respond within {CHECK_TIMEOUT_S:g} s, please try again")
             return
         except Exception:
             # The status message already shows the error.
@@ -210,14 +191,15 @@ class ApiTokenWidget(widgets.VBox):
             return
 
         if 200 <= response.status_code < 300:
-            os.environ[TOKEN_ENV_VAR] = token
+            os.environ[DTC_API_TOKEN_ENV_NAME] = token
             self.token = token
-            self.status.stop(VALID_TOKEN_MESSAGE)
+            self.status.stop("✅ API token is valid. Please continue by running the next cell.")
             self._authenticated.set()
         else:
             await self._discard_client()
             self.status.stop(
-                f"{INVALID_TOKEN_MESSAGE} (response from DTC server: {response.status_code}: {response_message(response)})"
+                "❌ API token not authenticated, please try again "
+                f"(response from DTC server: {response.status_code}: {response_message(response)})"
             )
 
     async def _discard_client(self) -> None:
@@ -241,7 +223,7 @@ def request_api_token() -> ApiTokenWidget:
     """
     token_widget = ApiTokenWidget()
     display(token_widget)
-    env_token = os.environ.get(TOKEN_ENV_VAR, "").strip()
+    env_token = os.environ.get(DTC_API_TOKEN_ENV_NAME, "").strip()
     if env_token:
         token_widget.token_input.value = env_token
         token_widget.submit()

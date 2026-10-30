@@ -46,10 +46,12 @@ import sys
 import threading
 from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, ParamSpec, TextIO, TypeVar
 
 from IPython import get_ipython
-from IPython.display import display
+from IPython.core.displaypub import DisplayPublisher
+from IPython.core.interactiveshell import ExecutionInfo, ExecutionResult, InteractiveShell
+from IPython.display import DisplayHandle, display
 
 try:
     import ipywidgets as _widgets
@@ -61,6 +63,9 @@ DEFAULT_MESSAGE = "Running…"
 SHOW_DELAY_S = 0.1
 # Quiet period after new output before the spinner is moved back to the bottom.
 MOVE_DEBOUNCE_S = 0.25
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 _CSS = (
     "<style>"
@@ -108,19 +113,19 @@ def _output_widget_capturing() -> bool:
 class _CellSpinner:
     """Keep a spinner at the bottom of the output of the currently running cell."""
 
-    def __init__(self, shell: Any, message: str = DEFAULT_MESSAGE) -> None:
+    def __init__(self, shell: InteractiveShell, message: str = DEFAULT_MESSAGE) -> None:
         self.shell = shell
         self.default_message = message
         self.message = message
         self._lock = threading.RLock()
         self._local = threading.local()
         self._running = False
-        self._handle = None
+        self._handle: DisplayHandle | None = None
         self._clear_pending = False
         self._timer: threading.Timer | None = None
-        self._display_pub = None
-        self._patched: list[tuple[Any, str]] = []
-        self._stream_patches: list[tuple[Any, Callable, Any]] = []
+        self._display_pub: DisplayPublisher | None = None
+        self._patched: list[tuple[object, str]] = []
+        self._stream_patches: list[tuple[TextIO, Callable[[str], int], Callable[[str], int] | None]] = []
 
     # -- installation -------------------------------------------------------------------------------
     def install(self) -> None:
@@ -143,7 +148,7 @@ class _CellSpinner:
                 pass
         self._patched.clear()
 
-    def _patch(self, obj: Any, name: str, wrapper_factory: Callable) -> None:
+    def _patch(self, obj: object, name: str, wrapper_factory: Callable[..., object]) -> None:
         setattr(obj, name, wrapper_factory(getattr(obj, name)))
         self._patched.append((obj, name))
 
@@ -173,8 +178,13 @@ class _CellSpinner:
     def _is_own_output(self) -> bool:
         return getattr(self._local, "active", False)
 
-    def _wrap_publish(self, original: Callable) -> Callable:
-        def publish(data: dict, metadata: dict | None = None, *args: Any, **kwargs: Any) -> Any:
+    def _wrap_publish(self, original: Callable[..., None]) -> Callable[..., None]:
+        def publish(
+            data: dict[str, object],
+            metadata: dict[str, object] | None = None,
+            *args: object,
+            **kwargs: object,
+        ) -> None:
             result = original(data, metadata, *args, **kwargs)
             is_update = kwargs.get("update", args[1] if len(args) > 1 else False)
             if not is_update and not self._is_own_output:
@@ -183,8 +193,8 @@ class _CellSpinner:
 
         return publish
 
-    def _wrap_clear_output(self, original: Callable) -> Callable:
-        def clear_output(wait: bool = False) -> Any:
+    def _wrap_clear_output(self, original: Callable[[bool], None]) -> Callable[[bool], None]:
+        def clear_output(wait: bool = False) -> None:
             result = original(wait)
             if not self._is_own_output and not _output_widget_capturing():
                 with self._lock:
@@ -199,8 +209,8 @@ class _CellSpinner:
 
         return clear_output
 
-    def _wrap_write(self, original: Callable) -> Callable:
-        def write(string: str) -> Any:
+    def _wrap_write(self, original: Callable[[str], int]) -> Callable[[str], int]:
+        def write(string: str) -> int:
             result = original(string)
             if string and not self._is_own_output:
                 self._on_output()
@@ -268,7 +278,7 @@ class _CellSpinner:
                     self._local.active = False
 
     # -- IPython events -----------------------------------------------------------------------------
-    def _pre_run_cell(self, info: Any) -> None:
+    def _pre_run_cell(self, info: ExecutionInfo) -> None:
         with self._lock:
             self._running = True
             self._handle = None
@@ -277,7 +287,7 @@ class _CellSpinner:
             self._patch_streams()
             self._schedule_move(SHOW_DELAY_S)
 
-    def _post_run_cell(self, result: Any) -> None:
+    def _post_run_cell(self, result: ExecutionResult | None) -> None:
         with self._lock:
             self._running = False
             self._unpatch_streams()
@@ -306,7 +316,7 @@ def enable_cell_spinner(message: str = DEFAULT_MESSAGE) -> None:
     global _spinner
     shell = get_ipython()
     if shell is None or getattr(shell, "kernel", None) is None:
-        print("cell_spinner: not running in a Jupyter kernel, spinner not enabled.")
+        print("cell_spinner: not running in a Jupyter kernel, spinner not enabled.")  # noqa: T201
         return
     if _spinner is not None:
         _spinner.default_message = message
@@ -336,12 +346,12 @@ def set_message(message: str | None = None) -> None:
         _spinner.set_message(message)
 
 
-def load_ipython_extension(shell: Any) -> None:
+def load_ipython_extension(shell: InteractiveShell) -> None:
     """Enable the cell spinner via ``%load_ext``."""
     enable_cell_spinner()
 
 
-def unload_ipython_extension(shell: Any) -> None:
+def unload_ipython_extension(shell: InteractiveShell) -> None:
     """Disable the cell spinner via ``%unload_ext``."""
     disable_cell_spinner()
 
@@ -355,7 +365,7 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
     e.g. a validation error.
     """
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **kwargs: Any) -> None:  # noqa: ANN401  # HTML accepts arbitrary trait options.
         if _widgets is None:
             raise ImportError("BusyIndicator requires ipywidgets.")
         super().__init__(**kwargs)
@@ -379,7 +389,9 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
         self.value = f'<div class="nb-spinner-message">{html.escape(message)}</div>' if message else ""
 
     @contextmanager
-    def __call__(self, message: str = "Working…", disable: Iterable[Any] = ()) -> Generator[BusyIndicator, None, None]:
+    def __call__(
+        self, message: str = "Working…", disable: Iterable[_widgets.Widget] = ()
+    ) -> Generator[BusyIndicator, None, None]:
         """
         Show the spinner and disable ``disable`` widgets for the duration of the ``with`` block.
 
@@ -402,12 +414,14 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
             for widget in disable:
                 widget.disabled = False
 
-    def track(self, message: str = "Working…", disable: Iterable[Any] = ()) -> Callable[[Callable], Callable]:
+    def track(
+        self, message: str = "Working…", disable: Iterable[_widgets.Widget] = ()
+    ) -> Callable[[Callable[_P, _R]], Callable[_P, _R]]:
         """Wrap a (callback) function so that the indicator is busy while it runs."""
 
-        def decorator(func: Callable) -> Callable:
+        def decorator(func: Callable[_P, _R]) -> Callable[_P, _R]:
             @functools.wraps(func)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
+            def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
                 with self(message, disable):
                     return func(*args, **kwargs)
 
