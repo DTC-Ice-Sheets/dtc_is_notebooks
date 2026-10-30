@@ -1,13 +1,12 @@
-name: Build and Release Colab Wheels
+name: Build and Release venv wheels
 
 on:
   push:
     # paths:
     #   - 'pyproject.toml'
     #   - 'poetry.lock'
-    #   - 'src/**'
-    # branches:
-    #   - main
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -59,19 +58,21 @@ jobs:
           zip -rq ${{ steps.name_container.outputs.wheel_archive }} ./wheels
 
       - name: Create or Update Release Asset (Tagged Release)
-        uses: softprops/action-gh-release@v2
-        # if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: ${{ steps.name_container.outputs.wheel_archive }}
           draft: false
           prerelease: false
           generate_release_notes: true
+          retention_days: 1
 
       - name: Update 'latest' Release on main push
-        uses: softprops/action-gh-release@v2
-        # if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v3
+        if: github.ref == 'refs/heads/main'
         with:
           tag_name: latest
-          name: Latest Prebuilt Colab Wheels
+          name: Latest Prebuilt venv Wheels
           files: ${{ steps.name_container.outputs.wheel_archive }}
           prerelease: false
+          retention_days: 1
