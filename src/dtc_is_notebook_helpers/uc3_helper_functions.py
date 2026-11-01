@@ -1083,7 +1083,17 @@ def plot_power_law_results(x_pred: np.array, model_fit: dict) -> go.Figure:
     -------
     go.Figure
         Return a figure showing the observed data and predicted power-law fit.
+
+    Raises
+    ------
+    ValueError
+        Raise when the model fit is empty.
     """
+    if not model_fit:
+        raise ValueError(
+            "Model fit is empty, in order for a power-law model to fitted, you must include both subglacial"
+            " lake discharge and basal melt rate data."
+        )
     y_pred = predict_power_law(x_pred, model_fit)
     x = np.asarray(model_fit["x"], float)
     y = np.asarray(model_fit["y"], float)
