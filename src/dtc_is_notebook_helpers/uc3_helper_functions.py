@@ -1180,23 +1180,23 @@ def plot_change_detection(
     fig = go.Figure()
 
     # Find the start index of each run of identical labels
-    starts = [0] if n else []
-    starts += [i for i in range(1, n) if change_regions[i] != change_regions[i - 1]]
-    ends = starts[1:] + [n]  # exclusive
-
-    for k, (s, e) in enumerate(zip(starts, ends, strict=False)):
-        fig.add_shape(
-            type="rect",
-            xref="x",
-            yref="paper",
-            x0=edge(s, t, n),
-            x1=edge(e, t, n),
-            y0=0,
-            y1=1,
-            fillcolor=shade_colours[k % len(shade_colours)],
-            line_width=0,
-            layer="below",
-        )
+    if change_regions.size > 0:
+        starts = [0] if n else []
+        starts += [i for i in range(1, n) if change_regions[i] != change_regions[i - 1]]
+        ends = starts[1:] + [n]  # exclusive
+        for k, (s, e) in enumerate(zip(starts, ends, strict=False)):
+            fig.add_shape(
+                type="rect",
+                xref="x",
+                yref="paper",
+                x0=edge(s, t, n),
+                x1=edge(e, t, n),
+                y0=0,
+                y1=1,
+                fillcolor=shade_colours[k % len(shade_colours)],
+                line_width=0,
+                layer="below",
+            )
 
     # Main series
     fig.add_trace(
