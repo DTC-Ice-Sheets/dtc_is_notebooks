@@ -11,6 +11,25 @@ repos:
       - id: name-tests-test
         args: ["--pytest-test-first"]
 
+  # --- Notebook hygiene: strip volatile metadata, keep figures -------------
+  # Ideally keep this hook in sync with the DESP configuration for notebook metadata stripping
+  # See: https://github.com/SercoSPA/DESP-UserWorkflowService-Templates/blob/6851951bb076aa342369366cecb1265d90a9a514/.pre-commit-config.yaml#L15
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+        name: strip notebook metadata (keep outputs)
+        args:
+          # - --keep-output - for now depart from SERCO on this
+          - --extra-keys
+          - metadata.language_info metadata.anaconda-cloud metadata.kernelspec
+
+    # --- Secret scanning -----------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.9.9
