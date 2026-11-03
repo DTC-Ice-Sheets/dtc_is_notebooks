@@ -137,6 +137,12 @@ class ApiTokenWidget(widgets.VBox):
         """Return True once a valid token has been submitted."""
         return self.token is not None
 
+    def get_client(self) -> ApiClient:
+        """Return the authenticated API client, or Raise an error if not authenticated."""
+        if self.dtc_client is None:
+            raise RuntimeError("API client is not authenticated.")
+        return self.dtc_client
+
     async def wait_until_authenticated(self) -> None:
         """Wait for a valid token, allowing widget interactions and retries while waiting."""
         if self._authenticated.is_set():
