@@ -763,7 +763,7 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
 
     res = await wait_for_job(client=client, job_id=res.job_id)
 
-    output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
+    output_url = res.outputs["ice-shelf-state-and-fate-covariate-analyser"]["output_json"]
     r = requests.get(output_url, timeout=10)
     r.raise_for_status()
     plot_data = r.json()
@@ -802,7 +802,7 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
 
         res = await wait_for_job(client=client, job_id=res.job_id)
 
-        output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
+        output_url = res.outputs["ice-shelf-state-and-fate-covariate-analyser"]["output_json"]
         r = requests.get(output_url, timeout=10)
         r.raise_for_status()
         results.append(r.json())
