@@ -182,22 +182,46 @@ def test_timeout_discards_client_and_shows_timeout(monkeypatch: pytest.MonkeyPat
     assert "The API did not respond within 5 s" in widget.status.value
 
 
-def test_request_api_token_displays_widget_and_checks_environment_token(monkeypatch: pytest.MonkeyPatch):
+def test_request_api_token_clears_environment_token_and_starts_unauthenticated(monkeypatch: pytest.MonkeyPatch):
     display = MagicMock()
     monkeypatch.setattr(authentication_widget, "display", display)
-    monkeypatch.setattr(
-        authentication_widget,
-        "check_api_token",
-        AsyncMock(return_value=_response(200)),
-    )
+    check_api_token = AsyncMock(return_value=_response(200))
+    monkeypatch.setattr(authentication_widget, "check_api_token", check_api_token)
     monkeypatch.setenv(authentication_widget.DTC_API_TOKEN_ENV_NAME, f"  {VALID_CREDENTIAL}  ")
 
     widget = authentication_widget.request_api_token()
 
     display.assert_called_once_with(widget)
-    assert widget.token_input.value == VALID_CREDENTIAL
-    assert widget.is_authenticated is True
-    assert widget.token == VALID_CREDENTIAL
+    assert widget.token_input.value == ""
+    assert widget.is_authenticated is False
+    assert widget.token is None
+    assert widget.dtc_client is None
+    assert widget._authenticated.is_set() is False
+    assert authentication_widget.DTC_API_TOKEN_ENV_NAME not in authentication_widget.os.environ
+    check_api_token.assert_not_awaited()
+
+
+def test_request_api_token_requires_new_submission_after_previous_authentication(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(authentication_widget, "display", MagicMock())
+    check_api_token = AsyncMock(return_value=_response(200))
+    monkeypatch.setattr(authentication_widget, "check_api_token", check_api_token)
+    monkeypatch.delenv(authentication_widget.DTC_API_TOKEN_ENV_NAME, raising=False)
+    previous_widget = authentication_widget.request_api_token()
+    previous_widget.token_input.value = VALID_CREDENTIAL
+    previous_widget.submit()
+    assert previous_widget.is_authenticated is True
+    assert authentication_widget.os.environ[authentication_widget.DTC_API_TOKEN_ENV_NAME] == VALID_CREDENTIAL
+    check_api_token.reset_mock()
+
+    widget = authentication_widget.request_api_token()
+
+    assert widget is not previous_widget
+    assert widget.token_input.value == ""
+    assert widget.token is None
+    assert widget.dtc_client is None
+    assert widget._authenticated.is_set() is False
+    assert authentication_widget.DTC_API_TOKEN_ENV_NAME not in authentication_widget.os.environ
+    check_api_token.assert_not_awaited()
 
 
 def test_request_api_token_does_not_submit_without_environment_token(monkeypatch: pytest.MonkeyPatch):
@@ -212,6 +236,46 @@ def test_request_api_token_does_not_submit_without_environment_token(monkeypatch
     display.assert_called_once_with(widget)
     assert widget.token_input.value == ""
     assert widget.is_authenticated is False
+    check_api_token.assert_not_awaited()
+
+
+@pytest.mark.parametrize("status_code", [200, 401])
+def test_request_api_token_checks_explicit_token(monkeypatch: pytest.MonkeyPatch, status_code: int):
+    display = MagicMock()
+    monkeypatch.setattr(authentication_widget, "display", display)
+    check_api_token = AsyncMock(return_value=_response(status_code))
+    monkeypatch.setattr(authentication_widget, "check_api_token", check_api_token)
+    monkeypatch.setenv(authentication_widget.DTC_API_TOKEN_ENV_NAME, "previous-token")
+
+    widget = authentication_widget.request_api_token(token=f"  {VALID_CREDENTIAL}  ")
+
+    display.assert_called_once_with(widget)
+    assert widget.token_input.value == VALID_CREDENTIAL
+    check_api_token.assert_awaited_once()
+    checked_client = check_api_token.call_args.args[0]
+    assert checked_client.configuration.access_token == VALID_CREDENTIAL
+    if status_code == 200:
+        assert widget.is_authenticated is True
+        assert widget.token == VALID_CREDENTIAL
+        assert authentication_widget.os.environ[authentication_widget.DTC_API_TOKEN_ENV_NAME] == VALID_CREDENTIAL
+    else:
+        assert widget.is_authenticated is False
+        assert widget.dtc_client is None
+        assert authentication_widget.DTC_API_TOKEN_ENV_NAME not in authentication_widget.os.environ
+
+
+@pytest.mark.parametrize("token", [None, "", "   "])
+def test_request_api_token_with_empty_explicit_token_starts_fresh(monkeypatch: pytest.MonkeyPatch, token):
+    monkeypatch.setattr(authentication_widget, "display", MagicMock())
+    check_api_token = AsyncMock()
+    monkeypatch.setattr(authentication_widget, "check_api_token", check_api_token)
+    monkeypatch.setenv(authentication_widget.DTC_API_TOKEN_ENV_NAME, VALID_CREDENTIAL)
+
+    widget = authentication_widget.request_api_token(token=token)
+
+    assert widget.token_input.value == ""
+    assert widget.is_authenticated is False
+    assert authentication_widget.DTC_API_TOKEN_ENV_NAME not in authentication_widget.os.environ
     check_api_token.assert_not_awaited()
 
 

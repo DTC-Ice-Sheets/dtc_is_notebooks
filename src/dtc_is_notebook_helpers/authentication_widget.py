@@ -13,8 +13,9 @@ Usage (in a notebook cell)::
 The token is checked when the user presses "Submit". Awaiting authentication keeps the cell running until
 a token is accepted, without blocking widget interactions.
 
-If the ``DTC_API_TOKEN`` environment variable is set, its token is filled in and checked automatically. Use this
-in VS Code, which does not support pasting into the input box.
+Each call to ``request_api_token`` clears the ``DTC_API_TOKEN`` environment variable and starts fresh.
+To provide a token up front, use ``request_api_token(token=your_token)``; it is checked automatically.
+Without an explicit token, the widget starts empty and unauthenticated.
 """
 
 from __future__ import annotations
@@ -214,23 +215,29 @@ class ApiTokenWidget(widgets.VBox):
             await client.close()
 
 
-def request_api_token() -> ApiTokenWidget:
+def request_api_token(token: str | None = None) -> ApiTokenWidget:
     """
-    Display the API token widget.
+    Clear the saved environment token and display a fresh API token widget.
 
     A valid submitted token is stored in the ``DTC_API_TOKEN`` environment variable for use by the API helpers.
-    If that variable is already set, its token is filled in and checked straight away. This also works around
-    VS Code, where pasting into the widget's input box is not possible.
+    Each call clears that variable. An explicitly supplied token is filled in and checked automatically;
+    otherwise the input starts empty, requiring a new submission.
+    Previously returned API clients are not revoked.
+
+    Parameters
+    ----------
+    token : str | None, optional
+        Token to check immediately. If omitted or blank, display an empty widget.
 
     Returns
     -------
     ApiTokenWidget
         The displayed widget.
     """
+    os.environ.pop(DTC_API_TOKEN_ENV_NAME, None)
     token_widget = ApiTokenWidget()
     display(token_widget)
-    env_token = os.environ.get(DTC_API_TOKEN_ENV_NAME, "").strip()
-    if env_token:
-        token_widget.token_input.value = env_token
+    if token and token.strip():
+        token_widget.token_input.value = token.strip()
         token_widget.submit()
     return token_widget
