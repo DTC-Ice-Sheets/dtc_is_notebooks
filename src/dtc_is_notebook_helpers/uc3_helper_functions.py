@@ -28,6 +28,8 @@ from plotly.colors import qualitative
 from plotly.subplots import make_subplots
 from traitlets import traitlets
 
+from dtc_is_notebook_helpers.cell_spinner import BusyIndicator, enable_cell_spinner, set_message
+
 
 def authenticate_with_token(token: str) -> ApiClient:
     """
@@ -748,7 +750,10 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
     dict
         Parsed JSON payload containing covariate analysis results.
     """
+    load_status = BusyIndicator()
     variable_mapping = get_variables(input_selector)
+    load_status.start(f"Running data linkage analysis for {variable_mapping}...")
+    print(f"Variable mapping: {variable_mapping}")
 
     analysis_type = _get_analysis_type(input_selector)
     res = await StateAndFateApi(client).run_covariate_analysis(
@@ -767,6 +772,8 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
     r = requests.get(output_url, timeout=10)
     r.raise_for_status()
     plot_data = r.json()
+
+    load_status.stop()
 
     return plot_data
 
