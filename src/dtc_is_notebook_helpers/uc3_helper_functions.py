@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import textwrap
 from datetime import datetime
 from pathlib import Path
@@ -27,8 +28,6 @@ from IPython.display import display
 from plotly.colors import qualitative
 from plotly.subplots import make_subplots
 from traitlets import traitlets
-
-from dtc_is_notebook_helpers.cell_spinner import BusyIndicator, enable_cell_spinner, set_message
 
 
 def authenticate_with_token(token: str) -> ApiClient:
@@ -750,10 +749,7 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
     dict
         Parsed JSON payload containing covariate analysis results.
     """
-    load_status = BusyIndicator()
     variable_mapping = get_variables(input_selector)
-    load_status.start(f"Running data linkage analysis for {variable_mapping}...")
-    print(f"Variable mapping: {variable_mapping}")
 
     analysis_type = _get_analysis_type(input_selector)
     res = await StateAndFateApi(client).run_covariate_analysis(
@@ -771,9 +767,7 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
     output_url = res.outputs["ice-shelf-state-and-fate-covariate-analyser"]["output_json"]
     r = requests.get(output_url, timeout=10)
     r.raise_for_status()
-    plot_data = r.json()
-
-    load_status.stop()
+    plot_data = json.loads(r.content)  # The data may contain NaN values, so need a NaN-compatible JSON decoder.
 
     return plot_data
 
@@ -812,7 +806,7 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
         output_url = res.outputs["ice-shelf-state-and-fate-covariate-analyser"]["output_json"]
         r = requests.get(output_url, timeout=10)
         r.raise_for_status()
-        results.append(r.json())
+        results.append(json.loads(r.content))  # The data may contain NaN values, so need a NaN-compatible JSON decoder.
 
     for i, result_var in enumerate(results):
         dataset = variable_mapping[i].dataset
