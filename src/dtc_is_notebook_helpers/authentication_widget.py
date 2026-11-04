@@ -47,6 +47,16 @@ LABEL_HTML = (
 CHECK_TIMEOUT_S = 5.0
 
 
+class _CredentialInput(widgets.Password):
+    """Password input that omits its value from full widget-state snapshots."""
+
+    def get_state(self, key: Any = None, drop_defaults: bool = False) -> dict[str, Any]:
+        state = super().get_state(key=key, drop_defaults=drop_defaults)
+        if key is None:
+            state.pop("value", None)
+        return state
+
+
 async def check_api_token(client: ApiClient) -> ApiResponse:
     """
     Make a request to the DTC Query API with ``client`` and return the response.
@@ -115,7 +125,7 @@ class ApiTokenWidget(widgets.VBox):
 
     def __init__(self, **kwargs: Any) -> None:  # noqa: ANN401  # VBox accepts arbitrary trait options.
         self.label = widgets.HTML(value=LABEL_HTML)
-        self.token_input = widgets.Text(
+        self.token_input = _CredentialInput(
             value="", placeholder="paste your API token here...", layout=widgets.Layout(width="400px")
         )
         self.submit_button = widgets.Button(description="Submit", button_style="success")
@@ -162,9 +172,10 @@ class ApiTokenWidget(widgets.VBox):
     def _on_submit(self, _button: widgets.Button) -> None:
         self.submit()
 
-    def submit(self) -> None:
+    def submit(self, token: str | None = None) -> None:
         """Check the token in the input box, as if the "Submit" button had been pressed."""
-        token = self.token_input.value.strip()
+        token = (self.token_input.value if token is None else token).strip()
+        self.token_input.value = ""
         if not token:
             self.status.stop("Please paste an API token before submitting.")
             return
@@ -238,6 +249,5 @@ def request_api_token(token: str | None = None) -> ApiTokenWidget:
     token_widget = ApiTokenWidget()
     display(token_widget)
     if token and token.strip():
-        token_widget.token_input.value = token.strip()
-        token_widget.submit()
+        token_widget.submit(token.strip())
     return token_widget
