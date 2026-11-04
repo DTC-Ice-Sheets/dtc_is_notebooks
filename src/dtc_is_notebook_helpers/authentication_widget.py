@@ -50,7 +50,7 @@ CHECK_TIMEOUT_S = 5.0
 class _CredentialInput(widgets.Password):
     """Password input that omits its value from full widget-state snapshots."""
 
-    def get_state(self, key: Any = None, drop_defaults: bool = False) -> dict[str, Any]:
+    def get_state(self, key: str | None = None, drop_defaults: bool = False) -> dict[str, Any]:
         state = super().get_state(key=key, drop_defaults=drop_defaults)
         if key is None:
             state.pop("value", None)

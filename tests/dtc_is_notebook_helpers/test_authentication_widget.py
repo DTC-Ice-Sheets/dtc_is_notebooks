@@ -250,7 +250,8 @@ def test_request_api_token_checks_explicit_token(monkeypatch: pytest.MonkeyPatch
     widget = authentication_widget.request_api_token(token=f"  {VALID_CREDENTIAL}  ")
 
     display.assert_called_once_with(widget)
-    assert widget.token_input.value == VALID_CREDENTIAL
+    assert widget.token_input.value == ""  # check that the token is cleared from the widget
+    assert "value" not in widget.token_input.get_state()
     check_api_token.assert_awaited_once()
     checked_client = check_api_token.call_args.args[0]
     assert checked_client.configuration.access_token == VALID_CREDENTIAL
