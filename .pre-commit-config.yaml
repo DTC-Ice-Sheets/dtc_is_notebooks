@@ -20,7 +20,10 @@ repos:
       - id: nbstripout
         name: strip notebook metadata (keep outputs)
         args:
-          - --keep-output
+          # Serco have `--keep-output`` enabled but keep off for now until we decide to keep notebook outputs.
+          # NOTE: we should also add `--drop-output-type stream:stdout` and `--drop-output-type stream:stderr` to
+          # remove output streams from notebooks.
+          # - --keep-output
           - --extra-keys
           - metadata.language_info metadata.anaconda-cloud metadata.kernelspec
 
