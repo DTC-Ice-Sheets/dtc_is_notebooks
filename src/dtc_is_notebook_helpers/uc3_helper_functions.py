@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import textwrap
 from datetime import datetime
 from pathlib import Path
@@ -763,10 +764,10 @@ async def run_data_linkage_analysis(client: ApiClient, input_selector: widgets.V
 
     res = await wait_for_job(client=client, job_id=res.job_id)
 
-    output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
+    output_url = res.outputs["ice-shelf-state-and-fate-covariate-analyser"]["output_json"]
     r = requests.get(output_url, timeout=10)
     r.raise_for_status()
-    plot_data = r.json()
+    plot_data = json.loads(r.content)  # The data may contain NaN values, so need a NaN-compatible JSON decoder.
 
     return plot_data
 
@@ -802,10 +803,10 @@ async def extract_timeseries_data(client: ApiClient, input_selector: widgets.VBo
 
         res = await wait_for_job(client=client, job_id=res.job_id)
 
-        output_url = res.outputs["use-case-3-covariate-analyser"]["output_json"]
+        output_url = res.outputs["ice-shelf-state-and-fate-covariate-analyser"]["output_json"]
         r = requests.get(output_url, timeout=10)
         r.raise_for_status()
-        results.append(r.json())
+        results.append(json.loads(r.content))  # The data may contain NaN values, so need a NaN-compatible JSON decoder.
 
     for i, result_var in enumerate(results):
         dataset = variable_mapping[i].dataset
