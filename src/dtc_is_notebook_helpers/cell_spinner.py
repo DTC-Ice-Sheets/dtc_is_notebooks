@@ -398,8 +398,8 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
         If the block calls :meth:`stop` itself (e.g. to show an error), that message is kept.
         Exceptions are shown in the indicator and re-raised.
         """
-        disable = list(disable)
-        for widget in disable:
+        disabled_states = [(widget, widget.disabled) for widget in disable]
+        for widget, _ in disabled_states:
             widget.disabled = True
         self.start(message)
         try:
@@ -411,8 +411,8 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
             if self.busy:
                 self.stop()
         finally:
-            for widget in disable:
-                widget.disabled = False
+            for widget, was_disabled in disabled_states:
+                widget.disabled = was_disabled
 
     def track(
         self, message: str = "Working…", disable: Iterable[_widgets.Widget] = ()
