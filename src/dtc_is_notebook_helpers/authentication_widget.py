@@ -41,8 +41,10 @@ TOKEN_URL = f"{API_HOST}/auth/get-token"
 DTC_API_TOKEN_ENV_NAME = "DTC_API_TOKEN"  # noqa: S105 - this is the environment variable name, not the token itself.
 
 LABEL_HTML = (
-    f'API token (<a href="{TOKEN_URL}" target="_blank" rel="noopener noreferrer" '
+    f'<span style="color:var(--jp-ui-font-color1,CanvasText)">API token '
+    f'(<a href="{TOKEN_URL}" target="_blank" rel="noopener noreferrer" '
     'style="color:var(--jp-content-link-color,#1976d2);text-decoration:underline">login here</a>):'
+    "</span>"
 )
 CHECK_TIMEOUT_S = 5.0
 TOKEN_INPUT_PLACEHOLDER = "paste your API token here..."  # noqa: S105 - placeholder text, not a credential.

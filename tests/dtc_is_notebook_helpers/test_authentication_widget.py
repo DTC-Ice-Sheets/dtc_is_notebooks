@@ -69,6 +69,10 @@ def test_response_message(raw_data: bytes, status_code: int, expected: str):
     assert authentication_widget.response_message(_response(status_code, raw_data)) == expected
 
 
+def test_api_token_label_uses_theme_aware_text_color() -> None:
+    assert "color:var(--jp-ui-font-color1,CanvasText)" in authentication_widget.LABEL_HTML
+
+
 def test_submit_without_token_shows_validation_message(monkeypatch: pytest.MonkeyPatch):
     widget = authentication_widget.ApiTokenWidget()
     monkeypatch.setattr(authentication_widget, "ApiClient", MagicMock())

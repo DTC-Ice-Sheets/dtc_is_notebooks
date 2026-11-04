@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import MagicMock
 
 import ipywidgets as widgets
@@ -23,6 +24,17 @@ def test_spinner_html_escapes_message() -> None:
     assert "<script>" not in result
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in result
     assert 'class="nb-spinner__ring"' in result
+    assert "color:var(--jp-ui-font-color1,CanvasText)" in result
+
+
+def test_busy_indicator_message_uses_theme_aware_color() -> None:
+    indicator = cell_spinner.BusyIndicator()
+
+    indicator.stop("Ready")
+
+    assert 'class="nb-spinner-message"' in indicator.value
+    assert "color:var(--jp-ui-font-color1,CanvasText)" in indicator.value
+    assert ">Ready</div>" in indicator.value
 
 
 def test_output_widget_capturing_is_false_when_ipywidgets_is_not_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,6 +107,35 @@ def test_clear_output_hook_schedules_or_defers_spinner(wait: bool, monkeypatch: 
     else:
         assert spinner._handle is None
         spinner._schedule_move.assert_called_once_with(cell_spinner.MOVE_DEBOUNCE_S)
+
+
+def test_clear_output_wait_before_initial_spinner_does_not_prevent_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cell_spinner, "_output_widget_capturing", lambda: False)
+    shell = MagicMock()
+    spinner = cell_spinner._CellSpinner(shell, "Loading")
+    spinner._display_pub = shell.display_pub
+    spinner._running = True
+    spinner._wrap_clear_output(MagicMock())(wait=True)
+
+    display = MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(cell_spinner, "display", display)
+    spinner._move()
+
+    assert spinner._clear_pending is False
+    display.assert_called_once_with(spinner._bundle(), raw=True, display_id=True)
+
+
+def test_stale_timer_does_not_move_spinner_or_clear_current_timer() -> None:
+    spinner = cell_spinner._CellSpinner(MagicMock())
+    stale_timer = MagicMock()
+    current_timer = MagicMock()
+    spinner._timer = current_timer
+    spinner._move = MagicMock()
+
+    spinner._move_if_current(stale_timer)
+
+    spinner._move.assert_not_called()
+    assert spinner._timer is current_timer
 
 
 def test_move_displays_spinner_in_current_output(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -254,7 +295,9 @@ def test_busy_indicator_update_shows_plain_message_when_idle() -> None:
     indicator.update("Ready")
 
     assert indicator.busy is False
-    assert indicator.value == '<div class="nb-spinner-message">Ready</div>'
+    assert indicator.value == (
+        '<div class="nb-spinner-message" style="color:var(--jp-ui-font-color1,CanvasText)">Ready</div>'
+    )
 
 
 def test_busy_indicator_context_disables_widgets_and_stops_cleanly() -> None:
@@ -281,6 +324,20 @@ def test_busy_indicator_context_preserves_error_message_and_reraises() -> None:
 
     assert indicator.busy is False
     assert "Error: bad input" in indicator.value
+    assert button.disabled is False
+
+
+@pytest.mark.parametrize("exception", [KeyboardInterrupt, asyncio.CancelledError])
+def test_busy_indicator_context_stops_on_interruption(exception: type[BaseException]) -> None:
+    indicator = cell_spinner.BusyIndicator()
+    button = widgets.Button()
+
+    with pytest.raises(exception):
+        with indicator("Processing", disable=[button]):
+            raise exception()
+
+    assert indicator.busy is False
+    assert indicator.value == ""
     assert button.disabled is False
 
 

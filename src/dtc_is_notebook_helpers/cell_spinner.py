@@ -70,8 +70,9 @@ _R = TypeVar("_R")
 
 _CSS = (
     "<style>"
+    ".nb-spinner,.nb-spinner-message{color:var(--jp-ui-font-color1,CanvasText)}"
     ".nb-spinner{display:flex;align-items:center;gap:.6em;padding:4px 0;"
-    "font-size:var(--jp-ui-font-size1,13px);color:var(--jp-ui-font-color2,#616161)}"
+    "font-size:var(--jp-ui-font-size1,13px)}"
     ".nb-spinner__ring{width:14px;height:14px;flex:none;box-sizing:border-box;border-radius:50%;"
     "border:2px solid var(--jp-border-color2,#e0e0e0);border-top-color:var(--jp-brand-color1,#1976d2);"
     "animation:nb-spinner-rotate .8s linear infinite}"
@@ -209,7 +210,8 @@ class _CellSpinner:
                     if self._running:
                         if wait:
                             # The spinner disappears together with the old output once new output arrives.
-                            self._clear_pending = True
+                            if self._handle is not None:
+                                self._clear_pending = True
                         else:
                             self._handle = None
                             self._schedule_move(MOVE_DEBOUNCE_S)
@@ -245,9 +247,20 @@ class _CellSpinner:
             self._timer.cancel()
         # Copying the context keeps the kernel's parent header, so the spinner lands in the right cell.
         context = contextvars.copy_context()
-        self._timer = threading.Timer(delay, context.run, args=(self._move,))
-        self._timer.daemon = True
-        self._timer.start()
+        timer: threading.Timer
+
+        def move_if_current() -> None:
+            context.run(self._move_if_current, timer)
+
+        timer = threading.Timer(delay, move_if_current)
+        timer.daemon = True
+        self._timer = timer
+        timer.start()
+
+    def _move_if_current(self, timer: threading.Timer) -> None:
+        with self._lock:
+            if self._timer is timer:
+                self._move()
 
     def _move(self) -> None:
         with self._lock:
@@ -410,7 +423,12 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
     def stop(self, message: str = "") -> None:
         """Hide the spinner, optionally leaving ``message`` in its place."""
         self.busy = False
-        self.value = f'<div class="nb-spinner-message">{html.escape(message)}</div>' if message else ""
+        self.value = (
+            f'<div class="nb-spinner-message" style="color:var(--jp-ui-font-color1,CanvasText)">'
+            f"{html.escape(message)}</div>"
+            if message
+            else ""
+        )
 
     @contextmanager
     def __call__(
@@ -431,10 +449,9 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
         except Exception as e:
             self.stop(f"Error: {e}")
             raise
-        else:
+        finally:
             if self.busy:
                 self.stop()
-        finally:
             for widget, was_disabled in disabled_states:
                 widget.disabled = was_disabled
 
