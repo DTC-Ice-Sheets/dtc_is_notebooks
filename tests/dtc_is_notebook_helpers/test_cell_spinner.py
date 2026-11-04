@@ -24,6 +24,7 @@ def test_spinner_html_escapes_message() -> None:
     assert "<script>" not in result
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in result
     assert 'class="nb-spinner__ring"' in result
+    assert '<span style="color:var(--jp-ui-font-color1,CanvasText)">' in result
     assert "color:var(--jp-ui-font-color1,CanvasText)" in result
 
 

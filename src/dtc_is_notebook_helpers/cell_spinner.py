@@ -96,7 +96,8 @@ def spinner_html(message: str = DEFAULT_MESSAGE) -> str:
         Self-contained HTML snippet.
     """
     return (
-        f'{_CSS}<div class="nb-spinner"><div class="nb-spinner__ring"></div><span>{html.escape(message)}</span></div>'
+        f'{_CSS}<div class="nb-spinner"><div class="nb-spinner__ring"></div>'
+        f'<span style="color:var(--jp-ui-font-color1,CanvasText)">{html.escape(message)}</span></div>'
     )
 
 
