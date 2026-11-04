@@ -88,6 +88,7 @@ def test_submit_checks_token_and_authenticates(monkeypatch: pytest.MonkeyPatch):
     )
     monkeypatch.delenv(authentication_widget.DTC_API_TOKEN_ENV_NAME, raising=False)
     widget = authentication_widget.ApiTokenWidget()
+    assert widget.token_input.placeholder == authentication_widget.TOKEN_INPUT_PLACEHOLDER
     widget.token_input.value = f"  {VALID_CREDENTIAL}  "
 
     widget.submit()
@@ -97,6 +98,7 @@ def test_submit_checks_token_and_authenticates(monkeypatch: pytest.MonkeyPatch):
     assert isinstance(widget.dtc_client, ApiClient)
     assert widget.dtc_client.configuration.access_token == VALID_CREDENTIAL
     assert widget._authenticated.is_set()
+    assert widget.token_input.placeholder == authentication_widget.AUTHENTICATED_PLACEHOLDER
     assert authentication_widget.os.environ[authentication_widget.DTC_API_TOKEN_ENV_NAME] == VALID_CREDENTIAL
     assert widget.status.busy is False
     assert "API token is valid" in widget.status.value
@@ -157,6 +159,7 @@ def test_invalid_token_discards_client_and_shows_response(monkeypatch: pytest.Mo
     asyncio.run(widget._check_token("bad-token", None))
 
     assert widget.is_authenticated is False
+    assert widget.token_input.placeholder == authentication_widget.TOKEN_INPUT_PLACEHOLDER
     assert widget.dtc_client is None
     assert widget._authenticated.is_set() is False
     close.assert_awaited_once()

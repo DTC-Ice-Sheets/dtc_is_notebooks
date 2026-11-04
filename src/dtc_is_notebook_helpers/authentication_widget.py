@@ -34,7 +34,7 @@ from IPython import get_ipython
 from IPython.display import display
 from jupyter_ui_poll import ui_events
 
-from .cell_spinner import BusyIndicator
+from .cell_spinner import BusyIndicator, suppress_cell_spinner
 
 API_HOST = "https://query.dtc-ice-sheets.org"
 TOKEN_URL = f"{API_HOST}/auth/get-token"
@@ -45,6 +45,8 @@ LABEL_HTML = (
     'style="color:var(--jp-content-link-color,#1976d2);text-decoration:underline">login here</a>):'
 )
 CHECK_TIMEOUT_S = 5.0
+TOKEN_INPUT_PLACEHOLDER = "paste your API token here..."  # noqa: S105 - placeholder text, not a credential.
+AUTHENTICATED_PLACEHOLDER = "token submitted, to submit another token please rerun the cell first."
 
 
 class _CredentialInput(widgets.Password):
@@ -126,7 +128,7 @@ class ApiTokenWidget(widgets.VBox):
     def __init__(self, **kwargs: Any) -> None:  # noqa: ANN401  # VBox accepts arbitrary trait options.
         self.label = widgets.HTML(value=LABEL_HTML)
         self.token_input = _CredentialInput(
-            value="", placeholder="paste your API token here...", layout=widgets.Layout(width="400px")
+            value="", placeholder=TOKEN_INPUT_PLACEHOLDER, layout=widgets.Layout(width="400px")
         )
         self.submit_button = widgets.Button(description="Submit", button_style="success")
         self.status = BusyIndicator()
@@ -158,16 +160,17 @@ class ApiTokenWidget(widgets.VBox):
         """Wait for a valid token, allowing widget interactions and retries while waiting."""
         if self._authenticated.is_set():
             return
-        shell = get_ipython()
-        if shell is None or getattr(shell, "kernel", None) is None or kernel_version >= (7, 4):
-            await self._authenticated.wait()
-            return
+        with suppress_cell_spinner():
+            shell = get_ipython()
+            if shell is None or getattr(shell, "kernel", None) is None or kernel_version >= (7, 4):
+                await self._authenticated.wait()
+                return
 
-        # Older kernels queue widget messages behind the currently executing cell.
-        async with ui_events() as poll:
-            while not self._authenticated.is_set():
-                await poll(10)
-                await asyncio.sleep(0.05)
+            # Older kernels queue widget messages behind the currently executing cell.
+            async with ui_events() as poll:
+                while not self._authenticated.is_set():
+                    await poll(10)
+                    await asyncio.sleep(0.05)
 
     def _on_submit(self, _button: widgets.Button) -> None:
         self.submit()
@@ -215,6 +218,7 @@ class ApiTokenWidget(widgets.VBox):
         if 200 <= response.status_code < 300:
             os.environ[DTC_API_TOKEN_ENV_NAME] = token
             self.token = token
+            self.token_input.placeholder = AUTHENTICATED_PLACEHOLDER
             self.status.stop("✅ API token is valid. Please continue by running the next cell.")
             self._authenticated.set()
         else:

@@ -341,6 +341,22 @@ def disable_cell_spinner() -> None:
         _spinner = None
 
 
+@contextmanager
+def suppress_cell_spinner() -> Generator[None, None, None]:
+    """Temporarily stop the cell spinner, restoring it with its default message afterward."""
+    spinner = _spinner
+    if spinner is None:
+        yield
+        return
+
+    default_message = spinner.default_message
+    disable_cell_spinner()
+    try:
+        yield
+    finally:
+        enable_cell_spinner(default_message)
+
+
 def set_message(message: str | None = None) -> None:
     """
     Change the text next to the spinner of the currently running cell.

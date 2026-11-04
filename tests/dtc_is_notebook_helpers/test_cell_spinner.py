@@ -183,6 +183,33 @@ def test_enable_is_idempotent_and_disable_uninstalls(monkeypatch: pytest.MonkeyP
     shell.events.unregister.assert_any_call("post_run_cell", spinner._post_run_cell)
 
 
+def test_suppress_cell_spinner_restores_enabled_spinner(monkeypatch: pytest.MonkeyPatch) -> None:
+    spinner = MagicMock()
+    spinner.default_message = "Custom default"
+    monkeypatch.setattr(cell_spinner, "_spinner", spinner)
+
+    def disable() -> None:
+        cell_spinner._spinner = None
+
+    def enable(message: str = cell_spinner.DEFAULT_MESSAGE) -> None:
+        cell_spinner._spinner = MagicMock(default_message=message)
+
+    monkeypatch.setattr(cell_spinner, "disable_cell_spinner", disable)
+    monkeypatch.setattr(cell_spinner, "enable_cell_spinner", enable)
+    with cell_spinner.suppress_cell_spinner():
+        assert cell_spinner._spinner is None
+
+    assert cell_spinner._spinner is not None
+    assert cell_spinner._spinner.default_message == "Custom default"
+
+
+def test_suppress_cell_spinner_leaves_disabled_spinner_disabled() -> None:
+    with cell_spinner.suppress_cell_spinner():
+        assert cell_spinner._spinner is None
+
+    assert cell_spinner._spinner is None
+
+
 def test_set_message_is_noop_when_spinner_is_disabled() -> None:
     cell_spinner.set_message("Ignored")
 
