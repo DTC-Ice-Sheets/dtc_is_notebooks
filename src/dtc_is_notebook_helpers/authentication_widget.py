@@ -149,7 +149,7 @@ class ApiTokenWidget(widgets.VBox):
         return self.token is not None
 
     def get_client(self) -> ApiClient:
-        """Return the authenticated API client, or Raise an error if not authenticated."""
+        """Return the API client, or Raise an error if it doesn't exist."""
         if self.dtc_client is None:
             raise RuntimeError("API client is not authenticated.")
         return self.dtc_client
@@ -159,7 +159,7 @@ class ApiTokenWidget(widgets.VBox):
         if self._authenticated.is_set():
             return
         shell = get_ipython()
-        if shell is None or getattr(shell, "kernel", None) is None or kernel_version >= (7,):
+        if shell is None or getattr(shell, "kernel", None) is None or kernel_version >= (7, 4):
             await self._authenticated.wait()
             return
 
@@ -174,6 +174,9 @@ class ApiTokenWidget(widgets.VBox):
 
     def submit(self, token: str | None = None) -> None:
         """Check the token in the input box, as if the "Submit" button had been pressed."""
+        # Debounce - if a token check is already in progress, do not start another one.
+        if self._check_task is not None and not self._check_task.done():
+            return
         token = (self.token_input.value if token is None else token).strip()
         self.token_input.value = ""
         if not token:
@@ -183,6 +186,7 @@ class ApiTokenWidget(widgets.VBox):
         previous_client = self.dtc_client
         self.token = None
         self._authenticated.clear()
+        os.environ.pop(DTC_API_TOKEN_ENV_NAME, None)
         self.dtc_client = ApiClient(Configuration(host=API_HOST, access_token=token))
         check = self._check_token(token, previous_client)
         try:

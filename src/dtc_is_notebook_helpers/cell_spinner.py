@@ -59,6 +59,7 @@ except ImportError:  # pragma: no cover - ipywidgets is optional for the cell sp
     _widgets = None
 
 DEFAULT_MESSAGE = "Running…"
+_MISSING = object()
 # Cells finishing faster than this never show a spinner (avoids flicker and empty outputs).
 SHOW_DELAY_S = 0.1
 # Quiet period after new output before the spinner is moved back to the bottom.
@@ -124,7 +125,7 @@ class _CellSpinner:
         self._clear_pending = False
         self._timer: threading.Timer | None = None
         self._display_pub: DisplayPublisher | None = None
-        self._patched: list[tuple[object, str]] = []
+        self._patched: list[tuple[object, str, object, object]] = []
         self._stream_patches: list[tuple[TextIO, Callable[[str], int], Callable[[str], int] | None]] = []
 
     # -- installation -------------------------------------------------------------------------------
@@ -141,16 +142,23 @@ class _CellSpinner:
         self._post_run_cell(None)
         self.shell.events.unregister("pre_run_cell", self._pre_run_cell)
         self.shell.events.unregister("post_run_cell", self._post_run_cell)
-        for obj, name in self._patched:
+        for obj, name, wrapper, previous in self._patched:
             try:
-                delattr(obj, name)
+                if getattr(obj, name) is not wrapper:
+                    continue
+                if previous is _MISSING:
+                    delattr(obj, name)
+                else:
+                    setattr(obj, name, previous)
             except AttributeError:
                 pass
         self._patched.clear()
 
     def _patch(self, obj: object, name: str, wrapper_factory: Callable[..., object]) -> None:
-        setattr(obj, name, wrapper_factory(getattr(obj, name)))
-        self._patched.append((obj, name))
+        previous = getattr(obj, "__dict__", {}).get(name, _MISSING)
+        wrapper = wrapper_factory(getattr(obj, name))
+        setattr(obj, name, wrapper)
+        self._patched.append((obj, name, wrapper, previous))
 
     def _patch_streams(self) -> None:
         # IPython >= 9 wraps and restores ``stream.write`` around every cell, so streams are hooked per cell.

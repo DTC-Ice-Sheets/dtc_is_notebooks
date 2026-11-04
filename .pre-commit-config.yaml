@@ -20,7 +20,7 @@ repos:
       - id: nbstripout
         name: strip notebook metadata (keep outputs)
         args:
-          # - --keep-output - for now depart from SERCO on this
+          - --keep-output
           - --extra-keys
           - metadata.language_info metadata.anaconda-cloud metadata.kernelspec
 
