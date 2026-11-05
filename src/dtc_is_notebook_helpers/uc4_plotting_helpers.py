@@ -58,6 +58,38 @@ def output_paths(outputs: dict, node: str) -> list[str]:
     return paths
 
 
+def find_output_path(outputs: dict, name: str) -> str:
+    """
+    Return the one job output path whose store name (last path component) contains `name`.
+
+    Searches the outputs of every node, so it does not depend on node names or on the order of the paths,
+    e.g. ``find_output_path(result.outputs, "era5_data")`` for ``.../era5_data.zarr``.
+
+    Parameters
+    ----------
+    outputs : dict
+        The ``outputs`` of a finished API job, mapping node names to ``{"output_path": str | list[str]}``.
+    name : str
+        The (part of the) store name to look for, e.g. ``"era5_data"``.
+
+    Returns
+    -------
+    str
+        The matching output path.
+
+    Raises
+    ------
+    ValueError
+        If no path, or more than one path, matches `name`.
+    """
+    candidates = [p for node, value in outputs.items() if "output_path" in value for p in output_paths(outputs, node)]
+    matches = [p for p in candidates if name in p.split("?")[0].rstrip("/").rsplit("/", 1)[-1]]
+    if len(matches) != 1:
+        found = "none" if not matches else f"{len(matches)} ({matches})"
+        raise ValueError(f"Expected exactly one output named like '{name}', found {found}. Outputs: {candidates}")
+    return matches[0]
+
+
 def open_emulator_output(source: str | xr.Dataset) -> xr.Dataset:
     """Load the emulator output (zarr store, netCDF file or an already open Dataset) into memory."""
     if isinstance(source, xr.Dataset):

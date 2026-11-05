@@ -122,6 +122,53 @@ def _texts(fig: Figure) -> list[str]:
 
 
 # ----------------------------------------------------------------------------
+# find_output_path
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("outputs", "name", "expected"),
+    [
+        (
+            {"a": {"output_path": ["s3://b/rcm_data.zarr", "s3://b/era5_data.zarr/"]}},
+            "era5_data",
+            "s3://b/era5_data.zarr/",
+        ),
+        ({"a": {"output_path": ["s3://b/rcm_data.zarr", "s3://b/era5_data.zarr"]}}, "rcm_data", "s3://b/rcm_data.zarr"),
+        (
+            {"a": {"output_path": "s3://b/rcm-emulator-results.zarr"}},
+            "rcm-emulator-results",
+            "s3://b/rcm-emulator-results.zarr",
+        ),
+        (
+            {"a": {"output_path": ["s3://era5_data/rcm_data.zarr", "s3://b/era5_data.zarr"]}},
+            "era5_data",
+            "s3://b/era5_data.zarr",
+        ),
+        (
+            {"a": {"output_path": "https://h/era5_data.zarr?sig=rcm_data"}},
+            "era5_data",
+            "https://h/era5_data.zarr?sig=rcm_data",
+        ),
+        (
+            {"a": {"output_path": "s3://b/era5_data.zarr"}, "b": {"status": "done"}},
+            "era5_data",
+            "s3://b/era5_data.zarr",
+        ),
+        ({"a": {"output_path": "https://h/era5_data.zarr?sig=rcm_data"}}, "rcm_data", ValueError),
+        ({"a": {"output_path": ["s3://b/rcm_data.zarr", "s3://b/era5_data.zarr"]}}, "_data", ValueError),
+    ],
+)
+def test_find_output_path(outputs, name, expected):
+    """Test that `find_output_path` picks the one output whose store name matches, and raises otherwise."""
+    if expected is ValueError:
+        with pytest.raises(ValueError, match="Expected exactly one output"):
+            h.find_output_path(outputs, name)
+    else:
+        assert h.find_output_path(outputs, name) == expected
+
+
+# ----------------------------------------------------------------------------
 # open_emulator_output
 # ----------------------------------------------------------------------------
 
@@ -342,9 +389,7 @@ class TestSkillMetrics:
 
     def test_nan_rows_are_dropped_pairwise(self):
         """Test that rows with NaN in either column are dropped pairwise."""
-        df = pd.DataFrame(
-            {"emulator": [1.0, 2.0, np.nan, 4.0, 9.0], "racmo": [1.0, np.nan, 3.0, 4.0, 9.0]}
-        )
+        df = pd.DataFrame({"emulator": [1.0, 2.0, np.nan, 4.0, 9.0], "racmo": [1.0, np.nan, 3.0, 4.0, 9.0]})
         m = h.skill_metrics(df)
         assert m["n"] == 3  # rows 0, 3, 4
         assert m["bias"] == pytest.approx(0.0)
@@ -930,6 +975,7 @@ class TestSingleDateAndValidation:
 
 class TestSelectLocation:
     """Test the interactive location selection function `select_location()`."""
+
     @pytest.fixture(autouse=True)
     def _no_show_no_coast(self, offline_coastlines, monkeypatch):
         """Prevent the tests from showing a matplotlib window and from trying to draw coastlines."""
