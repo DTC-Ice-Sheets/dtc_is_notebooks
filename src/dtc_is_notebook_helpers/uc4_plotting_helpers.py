@@ -729,7 +729,8 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     for im, axis in ((im0, ax[0]), (im1, ax[1]), (im2, ax[2])):
         fig1.colorbar(im, ax=axis, orientation="horizontal", pad=0.05, shrink=0.9)
 
-    plt.suptitle(f"Glaciated SMB emulator - Antarctica - {date}", fontsize=18)
+    when = pd.Timestamp(out_ds["time"].sel(time=selected_date, method="nearest").values).strftime("%Y-%m")
+    fig1.suptitle(f"Glaciated SMB emulator - Antarctica - {when}", fontsize=18)
     plt.tight_layout()
     plt.close()
     return fig1
