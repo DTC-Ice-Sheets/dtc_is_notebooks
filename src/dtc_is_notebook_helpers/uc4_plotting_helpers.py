@@ -7,7 +7,7 @@ re-projection is needed.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 
 import cartopy.crs as ccrs
 import matplotlib as mpl
