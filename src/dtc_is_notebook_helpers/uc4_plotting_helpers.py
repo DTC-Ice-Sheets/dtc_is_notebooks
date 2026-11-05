@@ -426,26 +426,14 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
                     crs=POLAR)
 
     # ── Antartica overview ──────────────────────────────────────────────────────────
-    def _extent(x, y, pad_cells=(0, 0)) -> tuple[float, float, float, float]:  # noqa: ANN001
-        """Outer edges (xmin, xmax, ymin, ymax) of a regular grid from its cell CENTRES, optionally padded."""
-        x, y = np.asarray(x, float), np.asarray(y, float)
-        dx, dy = np.abs(np.diff(x)).mean(), np.abs(np.diff(y)).mean()
-        px, py = pad_cells[0] * dx, pad_cells[1] * dy
-        return x.min() - dx / 2 - px, x.max() + dx / 2 + px, y.min() - dy / 2 - py, y.max() + dy / 2 + py
-
-
-
-    context_pad_h = 16  # rows, top and bottom
-    context_pad_w = 8  # columns, left and right
-    polar = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
-    era5_ext = _extent(out_ds["x_era5"], out_ds["y_era5"], pad_cells=(context_pad_w, context_pad_h))
+    era5_ext = _extent(out_ds["x_era5"], out_ds["y_era5"], pad_cells=(CONTEXT_PAD_W, CONTEXT_PAD_H))
     tile_ext = _extent(out_ds["x"], out_ds["y"])
     hw = 2400 * 1e3
     x0, y0 = out_ds.attrs["x_3031"], out_ds.attrs["y_3031"]
-    ax[3].set_extent([x0 - hw, x0 + hw, y0 - hw, y0 + hw], crs=polar)
+    ax[3].set_extent([x0 - hw, x0 + hw, y0 - hw, y0 + hw], crs=POLAR)
     ax[3].coastlines("50m", linewidth=0.6)
     ax[3].gridlines(linewidth=0.3, alpha=0.5)
-    scale, kw = 1.0, {"transform": polar}
+    scale, kw = 1.0, {"transform": POLAR}
 
 
     for ext, color in ((era5_ext, "coral"), (tile_ext, "steelblue")):
