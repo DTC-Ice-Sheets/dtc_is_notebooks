@@ -648,11 +648,8 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
 
     fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": POLAR})
 
-    vmin = np.min([np.min(predictions), np.min(target)])
-    vmax = np.max([np.max(predictions), np.max(target)])
-
-    vmin = np.min(target)
-    vmax = np.max(target)
+    vmin = np.nanmin([np.nanmin(predictions), np.nanmin(target)])
+    vmax = np.nanmax([np.nanmax(predictions), np.nanmax(target)])
 
     im0 = ax[0].pcolormesh(out_ds.x_era5.values,
                         out_ds.y_era5.values,
@@ -732,7 +729,8 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     for im, axis in ((im0, ax[0]), (im1, ax[1]), (im2, ax[2])):
         fig1.colorbar(im, ax=axis, orientation="horizontal", pad=0.05, shrink=0.9)
 
-    plt.suptitle(f"Glaciated SMB emulator - Antarctica - {date}", fontsize=18)
+    when = pd.Timestamp(out_ds["time"].sel(time=selected_date, method="nearest").values).strftime("%Y-%m")
+    fig1.suptitle(f"Glaciated SMB emulator - Antarctica - {when}", fontsize=18)
     plt.tight_layout()
     plt.close()
     return fig1
@@ -771,8 +769,11 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     if not (date_min <= np.datetime64(selected_date) <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
-    predictions = out_ds["predictions"].sel(time=selected_date, method="nearest").values
-    target = out_ds["target_patches"].sel(time_r=selected_date, method="nearest").values
+    prediction = out_ds["predictions"].sel(time=selected_date, method="nearest")
+    predictions = prediction.values
+    target = reference_on_prediction_time(out_ds).sel(time=prediction.time).values
+    if not np.isfinite(target).any():
+        raise ValueError("No RACMO reference is available for the selected prediction month.")
 
     bias = predictions - target
     diff_vmin = np.nanpercentile(bias, 2)
@@ -878,7 +879,8 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     )
     ax[2].set_title("Predicted vs Target SMB Distribution", fontsize=14)
 
-    fig2.suptitle(f"Validation - {out_ds.time.values[0].astype('datetime64[D]')}", fontsize=18)
+    when = pd.Timestamp(out_ds["time"].sel(time=selected_date, method="nearest").values).strftime("%Y-%m")
+    fig2.suptitle(f"Validation - {when}", fontsize=18)
     fig2.tight_layout()
     plt.close()
 
