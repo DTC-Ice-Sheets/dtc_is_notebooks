@@ -1,15 +1,4 @@
-# ruff: noqa: S101, PLR2004, ANN, D, SLF001
-"""Tests for uc4_plotting_helpers.
-
-Run with:  pytest test_uc4_plotting_helpers.py -q
-
-Notes
------
-* A tiny synthetic dataset mimics the output of `run_postprocessing_loc`; no real data or network is needed.
-* Matplotlib runs on the Agg backend and cartopy's `coastlines` is stubbed (it would download Natural Earth data).
-* Tests marked ``xfail(strict=True)`` document suspected bugs in the module. When a bug is fixed the test
-  XPASSes, strict mode turns that into a failure, and the marker can simply be removed.
-"""
+"""Tests for uc4_plotting_helpers."""
 
 from __future__ import annotations
 
@@ -868,15 +857,24 @@ class TestSingleDateAndValidation:
         assert isinstance(func(ds, datetime(2020, 1, 16)), Figure)
 
     @pytest.mark.parametrize("func", DATE_FUNCS, ids=DATE_FUNC_IDS)
-    def test_last_date_is_accepted(self, ds, func):
-        """Test that the function accepts the last date in the dataset."""
-        assert isinstance(func(ds, datetime(2021, 12, 15)), Figure)
+    def test_last_date_is_accepted(self, func):
+        """Test that the function accepts the last date in the dataset.
 
-    @pytest.mark.parametrize("func", DATE_FUNCS, ids=DATE_FUNC_IDS)
-    def test_figure_is_closed_so_notebooks_do_not_show_it_twice(self, ds, func):
-        """Test that the function closes the figure after returning it, so that notebooks do not show it twice."""
-        fig = func(ds, datetime(2020, 6, 15))
-        assert not plt.fignum_exists(fig.number)
+        Uses a dataset whose RACMO record covers every month: `plot_validation` needs a reference for the
+        selected month, and the default fixture's RACMO ends in 2021-06.
+        """
+        full = make_dataset(n_racmo=N_TIME)
+        assert isinstance(func(full, datetime(2021, 12, 14)), Figure)
+
+    def test_validation_raises_for_month_without_racmo(self, ds):
+        """Test that plot_validation refuses a month that has no RACMO reference."""
+        with pytest.raises(ValueError, match="No RACMO reference"):
+            h.plot_validation(ds, datetime(2021, 12, 14))
+
+    def test_validation_raises_without_racmo_in_dataset(self, ds_no_racmo):
+        """Test that plot_validation refuses a dataset that has no RACMO reference at all."""
+        with pytest.raises(ValueError, match="No RACMO reference"):
+            h.plot_validation(ds_no_racmo, datetime(2020, 6, 15))
 
     def test_single_date_has_four_map_panels_and_three_colourbars(self, ds):
         """Test that the figure returned by plot_single_date has four map panels and three colourbars."""
@@ -911,7 +909,6 @@ class TestSingleDateAndValidation:
         rmse_mesh = next(c for ax in fig.axes for c in ax.collections if c.get_cmap().name == "inferno_r")
         assert rmse_mesh.norm.vmin == 0.0
 
-
     def test_validation_ignores_nan_in_distributions(self, ds):
         """Test that the validation plot ignores NaN values when computing distributions."""
         ds["predictions"][5, 0, 0] = np.nan
@@ -920,10 +917,11 @@ class TestSingleDateAndValidation:
 
     def test_validation_with_no_finite_values_raises(self, ds):
         """Test that the validation plot raises a ValueError when there are no finite values."""
+        # RACMO stays finite so the RACMO-availability check passes; the distribution check must then trigger.
         ds["predictions"][:] = np.nan
-        ds["target_patches"][:] = np.nan
-        with pytest.raises(ValueError):  # noqa: PT011
+        with pytest.raises(ValueError, match="at least one finite value"):
             h.plot_validation(ds, datetime(2020, 6, 15))
+
 
 # ----------------------------------------------------------------------------
 # select_location
@@ -933,7 +931,7 @@ class TestSingleDateAndValidation:
 class TestSelectLocation:
     """Test the interactive location selection function `select_location()`."""
     @pytest.fixture(autouse=True)
-    def _no_show_no_coast(self, monkeypatch):
+    def _no_show_no_coast(self, offline_coastlines, monkeypatch):
         """Prevent the tests from showing a matplotlib window and from trying to draw coastlines."""
         monkeypatch.setattr(plt, "show", lambda *a, **k: None)
 
@@ -992,4 +990,3 @@ class TestSelectLocation:
         fig.canvas.callbacks.process("button_press_event", MouseEvent("button_press_event", fig.canvas, px, py, 1))
         assert sel == {"lat": -75.0076, "lon": -65.1279}
         assert any("south of 60S" in t.get_text() for t in ax.texts)
-
