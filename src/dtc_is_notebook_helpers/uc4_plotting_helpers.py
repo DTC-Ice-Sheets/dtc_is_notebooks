@@ -1,4 +1,5 @@
-"""Exploration visuals for the DTC super-resolution SMB emulator (single location mode).
+"""
+Exploration visuals for the DTC super-resolution SMB emulator (single location mode).
 
 Everything here works from ONE input: the dataset written by `run_postprocessing_loc`
 (the "rcm-emulator" output of the API job). No local ERA5/RACMO re-download or
@@ -39,23 +40,6 @@ SMB_UNITS = "kg m$^{-2}$"  # check against your product; the dashboard labels so
 # ============================================================================
 
 
-def output_paths(outputs: dict, node: str) -> list[str]:
-    """Return the output path(s) of a job node as a list, whether the API gave a str or a list.
-
-    Indexing a plain string (`path[0]`) silently returns its first CHARACTER, so always go through this.
-    Raises a clear error when the workflow left a template expression (`{{= ... }}`) unrendered.
-    """
-    raw = outputs[node]["output_path"]
-    paths = [raw] if isinstance(raw, str) else list(raw)
-    unrendered = [p for p in paths if "{{" in p]
-    if unrendered:
-        raise ValueError(
-            f"Output of '{node}' contains an unrendered workflow expression: {unrendered[0][:120]}... "
-            "This is a server-side templating problem. Report the job id to the API maintainers."
-        )
-    return paths
-
-
 def find_output_path(outputs: dict, name: str) -> str:
     """
     Return the one job output path whose store name (last path component) contains `name`.
@@ -80,7 +64,12 @@ def find_output_path(outputs: dict, name: str) -> str:
     ValueError
         If no path, or more than one path, matches `name`.
     """
-    candidates = [p for node, value in outputs.items() if "output_path" in value for p in output_paths(outputs, node)]
+    candidates = []
+    for value in outputs.values():
+        if "output_path" in value:
+            raw = value["output_path"]
+            # A node can give a single path or a list of paths
+            candidates += [raw] if isinstance(raw, str) else list(raw)
     matches = [p for p in candidates if name in p.split("?")[0].rstrip("/").rsplit("/", 1)[-1]]
     if len(matches) != 1:
         found = "none" if not matches else f"{len(matches)} ({matches})"
@@ -94,12 +83,23 @@ def find_output_path(outputs: dict, name: str) -> str:
 
 
 def reference_on_prediction_time(ds: xr.Dataset) -> xr.DataArray:
-    """Return the RACMO reference on the emulator's `time` axis (NaN where RACMO has no matching month).
+    """
+    Return the RACMO reference on the emulator's `time` axis (NaN where RACMO has no matching month).
 
     `predictions` (ERA5 months) and `target_patches` (RACMO months) have DIFFERENT time axes, so comparing
     index i with index i is wrong whenever they start on different months or are stamped on different days.
     Matching by calendar month works for any day-of-month stamping. If RACMO is absent, return an all-NaN
     array with the predictions' shape.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The emulator output dataset.
+
+    Returns
+    -------
+    xr.DataArray
+        The RACMO reference on the emulator's `time` axis.
     """
     pred_m = pd.DatetimeIndex(ds["time"].values).to_period("M")
     if "target_patches" not in ds or "time_r" not in ds:
@@ -122,10 +122,23 @@ def reference_on_prediction_time(ds: xr.Dataset) -> xr.DataArray:
 
 
 def point_series(ds: xr.Dataset, era5_channel: str = "tp") -> pd.DataFrame:
-    """Monthly series at the requested location: emulator, RACMO and the ERA5 tile mean.
+    """
+    Monthly series at the requested location: emulator, RACMO and the ERA5 tile mean.
 
     The pixel is looked up by coordinates, not as the geometric tile centre: near the domain edge the tile
     window is shifted, so the centre pixel is then not the requested point.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        The emulator output dataset.
+    era5_channel : str, optional
+        The ERA5 channel to average over the tile. Default is "tp" (total precipitation).
+
+    Returns
+    -------
+    pd.DataFrame
+        The monthly series, with columns "emulator", "racmo" and "era5_<era5_channel>".
     """
     x0, y0 = ds.attrs["x_3031"], ds.attrs["y_3031"]
     sel = {"x": x0, "y": y0, "method": "nearest"}
@@ -142,7 +155,19 @@ def point_series(ds: xr.Dataset, era5_channel: str = "tp") -> pd.DataFrame:
 
 
 def skill_metrics(df: pd.DataFrame) -> dict:
-    """Bias, RMSE, MAE and correlation over the months where both emulator and RACMO exist."""
+    """
+    Bias, RMSE, MAE and correlation over the months where both emulator and RACMO exist.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Monthly series with "emulator" and "racmo" columns, e.g. from `point_series`.
+
+    Returns
+    -------
+    dict
+        The metrics, with keys "n", "bias", "rmse", "mae" and "r".
+    """
     both = df[["emulator", "racmo"]].dropna()
     if len(both) < 2:
         return {"n": len(both), "bias": np.nan, "rmse": np.nan, "mae": np.nan, "r": np.nan}
@@ -157,7 +182,21 @@ def skill_metrics(df: pd.DataFrame) -> dict:
 
 
 def _extent(x, y, pad_cells=(0, 0)) -> tuple[float, float, float, float]:  # noqa: ANN001
-    """Outer edges (xmin, xmax, ymin, ymax) of a regular grid from its cell CENTRES, optionally padded."""
+    """
+    Outer edges (xmin, xmax, ymin, ymax) of a regular grid from its cell CENTRES, optionally padded.
+
+    Parameters
+    ----------
+    x, y : array-like
+        The cell-centre coordinates along each axis.
+    pad_cells : tuple[int, int], optional
+        The number of cells to pad on each side, as (x, y). Default is (0, 0).
+
+    Returns
+    -------
+    tuple[float, float, float, float]
+        The outer edges (xmin, xmax, ymin, ymax).
+    """
     x, y = np.asarray(x, float), np.asarray(y, float)
     dx, dy = np.abs(np.diff(x)).mean(), np.abs(np.diff(y)).mean()
     px, py = pad_cells[0] * dx, pad_cells[1] * dy
@@ -165,15 +204,40 @@ def _extent(x, y, pad_cells=(0, 0)) -> tuple[float, float, float, float]:  # noq
 
 
 def _smb_norm(*arrays: np.ndarray) -> TwoSlopeNorm:
-    """Colour norm shared by RACMO and emulator, with white at zero (the gain/loss divide)."""
+    """
+    Colour norm shared by RACMO and emulator, with white at zero (the gain/loss divide).
+
+    Parameters
+    ----------
+    *arrays : np.ndarray
+        The SMB fields the norm is computed from.
+
+    Returns
+    -------
+    TwoSlopeNorm
+        The colour norm.
+    """
     vals = np.concatenate([a[np.isfinite(a)].ravel() for a in arrays])
     lo, hi = np.nanpercentile(vals, [1, 99])
     return TwoSlopeNorm(vmin=min(lo, -1e-6), vcenter=0.0, vmax=max(hi, 1e-6))
 
 
 def era5_label(channel: str) -> str:
-    """Axis label for an ERA5 channel. `x_cropped` is the RAW model input (not standardised, NaN kept), so these are
+    """
+    Axis label for an ERA5 channel.
+
+    `x_cropped` is the RAW model input (not standardised, NaN kept), so these are
     native ERA5 units (assumed: monthly means as delivered by the download step; `tp` is a daily accumulation in m).
+
+    Parameters
+    ----------
+    channel : str
+        The ERA5 channel name, e.g. "tp".
+
+    Returns
+    -------
+    str
+        The axis label.
     """
     return f"ERA5 {channel} [{ERA5_UNITS.get(channel, '?')}]  (raw input)"
 
@@ -189,8 +253,9 @@ def build_explorer(
     era5_channel: str = "tp",
     units: str = SMB_UNITS,
     height: int = 780,
-)-> go.Figure:  # -> plotly.graph_objects.Figure
-    """Month slider driving ERA5 precipitation, emulator and RACMO maps with synchronized time series.
+)-> go.Figure:
+    """
+    Month slider driving ERA5 precipitation, emulator and RACMO maps with synchronized time series.
 
     Parameters
     ----------
@@ -208,6 +273,7 @@ def build_explorer(
     Returns
     -------
     plotly.graph_objects.Figure
+        The interactive explorer figure.
     """
     df = point_series(ds, era5_channel)
     m = skill_metrics(df)
@@ -365,7 +431,8 @@ def build_explorer(
 # --------------------------------------------------
 
 def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.Figure:
-    """Plot ERA5 input, emulator prediction, RACMO reference and overview map for a single date.
+    """
+    Plot ERA5 input, emulator prediction, RACMO reference and overview map for a single date.
 
     Parameters
     ----------
@@ -373,6 +440,11 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
         The emulator output dataset.
     selected_date : datetime
         The date for which to plot the data.
+
+    Returns
+    -------
+    mpl.figure.Figure
+        The generated figure.
     """
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
@@ -488,6 +560,7 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
 
     Returns
     -------
+    mpl.figure.Figure
         The function generates and displays the plots for the specified date.
     """
     # check if the date within the dataset range
@@ -622,7 +695,8 @@ def select_location(
     *,
     figsize: tuple[float, float] = (7, 7),
 ) -> dict:
-    """Interactive Antarctica map for picking a lat/lon by clicking.
+    """
+    Interactive Antarctica map for picking a lat/lon by clicking.
 
     Parameters
     ----------
