@@ -2,22 +2,7 @@
 
 Everything here works from ONE input: the dataset written by `run_postprocessing_loc`
 (the "rcm-emulator" output of the API job). No local ERA5/RACMO re-download or
-re-projection is needed, because that dataset already carries all coordinates:
-
-    predictions     (time, y, x)                      emulator SMB on the RACMO grid (EPSG:3031, metres)
-    target_patches  (time_r, y, x)                    optional RACMO reference tile, with its OWN time axis
-    x_cropped       (time, channels, y_era5, x_era5)  ERA5 input tile with the context pad already removed
-    attrs           lon, lat, x_3031, y_3031 (+ *_slice dicts, not needed here)
-
-Public functions
-----------------
-output_paths                   read paths from `result.outputs[node]` safely (str or list)
-open_emulator_output           load the output (zarr or netCDF) into memory
-reference_on_prediction_time   align the RACMO reference to the emulator's months
-point_series, skill_metrics    the numbers behind the point plots
-plot_tile_comparison           ERA5 | RACMO | emulator | bias | location map        (matplotlib)
-plot_point_dashboard           time series, scatter, seasonal cycle, annual totals  (matplotlib)
-build_explorer                 month slider: maps + time series                     (plotly, Dash-ready)
+re-projection is needed.
 """
 
 from __future__ import annotations
@@ -25,22 +10,20 @@ from __future__ import annotations
 from datetime import date
 
 import matplotlib.patches as mpatches
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from datetime import datetime
 import plotly.graph_objects as go
 import pyproj
 import seaborn as sns
 import xarray as xr
 from matplotlib.colors import TwoSlopeNorm
 from plotly.subplots import make_subplots
+import cartopy.crs as ccrs
 
-try:  # cartopy is only needed for coastlines on the location map
-    import cartopy.crs as ccrs
-    POLAR = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
-    HAS_CARTOPY = True
-except ImportError:  # pragma: no cover
-    ccrs, POLAR, HAS_CARTOPY = None, None, False
+POLAR = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
 
 # Must match run_postprocessing_loc (ERA5 pixels cropped from the model input tile)
 CONTEXT_PAD_H = 16  # rows, top and bottom
@@ -267,8 +250,7 @@ def plot_tile_comparison(
     fig = plt.figure(figsize=figsize, constrained_layout=True)
     gs = fig.add_gridspec(1, 5, width_ratios=[1, 1, 1, 1, 1.1])
     axes = [fig.add_subplot(gs[0, i]) for i in range(4)]
-    use_cartopy = coastlines and HAS_CARTOPY
-    ax_map = fig.add_subplot(gs[0, 4], projection=POLAR) if use_cartopy else fig.add_subplot(gs[0, 4])
+    ax_map = fig.add_subplot(gs[0, 4], projection=POLAR)
 
     def draw(ax, xc, yc, field, cmap, norm_, title, label):  # noqa: ANN001, ANN202
         im = ax.pcolormesh(xc / 1e3, yc / 1e3, field, cmap=cmap, norm=norm_, shading="nearest")
@@ -307,17 +289,12 @@ def plot_tile_comparison(
     era5_ext = _extent(ds["x_era5"], ds["y_era5"], pad_cells=(CONTEXT_PAD_W, CONTEXT_PAD_H))
     tile_ext = _extent(ds["x"], ds["y"])
     hw = overview_halfwidth_km * 1e3
-    if use_cartopy:
-        ax_map.set_extent([x0 - hw, x0 + hw, y0 - hw, y0 + hw], crs=POLAR)
-        ax_map.coastlines(coast_resolution, linewidth=0.6)
-        ax_map.gridlines(linewidth=0.3, alpha=0.5)
-        scale, kw = 1.0, {"transform": POLAR}
-    else:  # plain axes in km, no coastlines
-        scale, kw = 1e-3, {}
-        ax_map.set_xlim((x0 - hw) * scale, (x0 + hw) * scale)
-        ax_map.set_ylim((y0 - hw) * scale, (y0 + hw) * scale)
-        ax_map.set_aspect("equal")
-        ax_map.set_xlabel("x [km]")
+
+    ax_map.set_extent([x0 - hw, x0 + hw, y0 - hw, y0 + hw], crs=POLAR)
+    ax_map.coastlines(coast_resolution, linewidth=0.6)
+    ax_map.gridlines(linewidth=0.3, alpha=0.5)
+    scale, kw = 1.0, {"transform": POLAR}
+
     for ext, color in ((era5_ext, "coral"), (tile_ext, "steelblue")):
         ax_map.add_patch(
             mpatches.Rectangle(
@@ -649,20 +626,20 @@ def build_explorer(
 # Figure 4: plots by single date
 # --------------------------------------------------
 
-def plot_single_date(out_ds: xr.Dataset, selected_date: str) -> None:
+def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.Figure:
     """Plot ERA5 input, emulator prediction, RACMO reference and overview map for a single date.
 
     Parameters
     ----------
     out_ds : xr.Dataset
         The emulator output dataset.
-    selected_date : str
-        The date string in the format 'YYYY-MM-DD' for which to plot the data.
+    selected_date : datetime
+        The date for which to plot the data.
     """
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (np.datetime64(selected_date) > date_min) and np.datetime64(selected_date) < date_max:
+    if not (date_min <= np.datetime64(selected_date) <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
     # select the nearest date in the dataset to the provided date
@@ -766,7 +743,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: str) -> None:
 # figure 5: validation
 # -----------------------------------------------------------
 
-def plot_validation(out_ds: xr.Dataset, selected_date: str) -> None:
+def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.Figure:
     """
     Plot the validation results for a given date.
 
@@ -777,7 +754,7 @@ def plot_validation(out_ds: xr.Dataset, selected_date: str) -> None:
     ----------
     out_ds : xr.Dataset
         The dataset containing the predictions and target values.
-    selected_date : str
+    selected_date : datetime
         The date for which to plot the validation results.
 
     Raises
@@ -787,13 +764,12 @@ def plot_validation(out_ds: xr.Dataset, selected_date: str) -> None:
 
     Returns
     -------
-    None
         The function generates and displays the plots for the specified date.
     """
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (np.datetime64(selected_date) > date_min) and np.datetime64(selected_date) < date_max:
+    if not (date_min <= np.datetime64(selected_date) <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
     predictions = out_ds["predictions"].sel(time=selected_date, method="nearest").values
@@ -810,8 +786,8 @@ def plot_validation(out_ds: xr.Dataset, selected_date: str) -> None:
     grid = fig2.add_gridspec(2, 2, height_ratios=[1, 0.8])  # tune height_ratios to taste
 
     ax = [
-        fig2.add_subplot(grid[0, 0], projection=ccrs.SouthPolarStereo()),
-        fig2.add_subplot(grid[0, 1], projection=ccrs.SouthPolarStereo()),
+        fig2.add_subplot(grid[0, 0], projection=POLAR),
+        fig2.add_subplot(grid[0, 1], projection=POLAR),
         fig2.add_subplot(grid[1, :]),   # spans both columns of row 2, no projection needed
     ]
 
@@ -820,25 +796,25 @@ def plot_validation(out_ds: xr.Dataset, selected_date: str) -> None:
                         out_ds["predictions"].y.values,
                         bias,
                         cmap="PiYG",
-                        transform=ccrs.SouthPolarStereo(),
+                        transform=POLAR,
                         vmin=-biaslim, vmax=biaslim)
     ax[0].set_title("Bias: Predictions - Target", fontsize=14)
     ax[0].coastlines("50m", linewidth=0.5)
     ax[0].set_extent([out_ds["predictions"].x.values.min(), out_ds["predictions"].x.values.max(),
                     out_ds["predictions"].y.values.min(), out_ds["predictions"].y.values.max()],
-                    crs=ccrs.SouthPolarStereo())
+                    crs=POLAR)
 
     im1 = ax[1].pcolormesh(out_ds["predictions"].x.values,
                         out_ds["predictions"].y.values,
                         rmse,
                         cmap="inferno_r",
                         vmin=0.0, vmax=rmse_max,
-                        transform=ccrs.SouthPolarStereo())
+                        transform=POLAR)
     ax[1].set_title("RMSE", fontsize=14)
     ax[1].coastlines("50m", linewidth=0.5)
     ax[1].set_extent([out_ds["predictions"].x.values.min(), out_ds["predictions"].x.values.max(),
                     out_ds["predictions"].y.values.min(), out_ds["predictions"].y.values.max()],
-                    crs=ccrs.SouthPolarStereo())
+                    crs=POLAR)
 
     # colorbar under each plot, except the overview (4th) panel
     for im, axis in ((im0, ax[0]), (im1, ax[1])):
@@ -934,11 +910,8 @@ def select_location(
     dict
         A dictionary containing the selected latitude and longitude with keys 'lat' and 'lon'.
     """
-    if not HAS_CARTOPY:
-        raise ImportError("cartopy is required for select_location()")
-
     fig_sel = plt.figure(figsize=figsize)
-    ax_sel = fig_sel.add_subplot(1, 1, 1, projection=ccrs.SouthPolarStereo())
+    ax_sel = fig_sel.add_subplot(1, 1, 1, projection=POLAR)
     ax_sel.set_extent([-180, 180, -90, -60], crs=PLATE)
     ax_sel.coastlines("50m", linewidth=0.6)
     ax_sel.gridlines(linewidth=0.3, alpha=0.5, draw_labels=True)
