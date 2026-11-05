@@ -1,76 +1,60 @@
-name: Build and Release venv wheels
+name: Build and Release Dev Tarball
 
 on:
   push:
-    # paths:
-    #   - 'pyproject.toml'
-    #   - 'poetry.lock'
     branches:
-      - main
-  workflow_dispatch:
+      - '**'           # Triggers on any branch you push to
+      - '!main'        # Excludes main so it only runs during feature development
+    paths:
+      - 'pyproject.toml'
+      - 'poetry.lock'
+      - '.github/workflows/build-dev-tarball.yml'
+  workflow_dispatch:   # Allows manual trigger from the GitHub Actions UI
 
 permissions:
-  contents: write
+  contents: write      # Required to push/update GitHub Releases
 
 jobs:
-  build-wheels:
+  build-and-pack:
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
+          # IMPORTANT: Match Google Colab's active Python version
           python-version: '3.13'
+          cache: 'pip'
 
-      - name: Define wheel archive name
-        id: name_container
+      - name: Install Poetry & Tooling
         run: |
-          echo "wheel_archive=dtc_is_notebooks-wheels-3.13.zip" | awk '{print tolower($0)}' >> $GITHUB_OUTPUT
+          python -m pip install --upgrade pip
+          python -m pip install poetry venv-pack
 
-      - name: Install PyPA build, Pip, and Poetry
+      - name: Create Native Venv & Configure Poetry
         run: |
-          python -m pip install --upgrade pip build poetry poetry-plugin-export
+          # 1. Create a standard native virtual environment at .venv (ensures pyvenv.cfg exists)
+          python -m venv .venv
 
-      - name: Build local package wheel (PEP 517 via poetry-core)
+          # 2. Point Poetry to this exact environment
+          poetry env use .venv/bin/python
+
+          # 3. Install production dependencies (skipping dev dependencies)
+          poetry install --no-root --without dev
+
+      - name: Package Environment with venv-pack
         run: |
-          mkdir -p wheels
-          python -m build --wheel --outdir wheels .
+          # --python-prefix matches the extraction folder inside Google Colab
+          venv-pack -p .venv -o colab_env.tar.gz --python-prefix /content/colab_venv --force
 
-      - name: Export dependencies from poetry.lock
-        run: |
-          poetry export -f requirements.txt \
-            --without dev \
-            --without-hashes \
-            --output wheels/requirements.txt
-
-      - name: Download pre-built wheels (strictly binary, no build backends)
-        run: |
-          python -m pip download \
-            --only-binary=:all: \
-            --dest wheels \
-            -r wheels/requirements.txt
-
-      - name: Bundle archive
-        run: |
-          zip -rq ${{ steps.name_container.outputs.wheel_archive }} ./wheels
-
-      - name: Create or Update Release Asset (Tagged Release)
-        uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish Dev Tarball to Rolling GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.name_container.outputs.wheel_archive }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-
-      - name: Update 'latest' Release on main push
-        uses: softprops/action-gh-release@v3
-        if: github.ref == 'refs/heads/main'
-        with:
-          tag_name: latest
-          name: Latest Prebuilt venv Wheels
-          files: ${{ steps.name_container.outputs.wheel_archive }}
-          prerelease: false
+          tag_name: dev-env
+          name: Development Colab Tarball
+          body: "Rolling development tarball built automatically from branch `${{ github.ref_name }}` (Commit: ${{ github.sha }})."
+          files: colab_env.tar.gz
+          prerelease: true
