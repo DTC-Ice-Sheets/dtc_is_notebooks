@@ -648,11 +648,8 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
 
     fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": ccrs.SouthPolarStereo()})
 
-    vmin = np.min([np.min(predictions), np.min(target)])
-    vmax = np.max([np.max(predictions), np.max(target)])
-
-    vmin = np.min(target)
-    vmax = np.max(target)
+    vmin = np.nanmin([np.nanmin(predictions), np.nanmin(target)])
+    vmax = np.nanmax([np.nanmax(predictions), np.nanmax(target)])
 
     im0 = ax[0].pcolormesh(out_ds.x_era5.values,
                         out_ds.y_era5.values,
