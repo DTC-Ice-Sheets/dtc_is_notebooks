@@ -1201,14 +1201,14 @@ test = ["cloudpickle", "pytest"]
 
 [[package]]
 name = "dtc-query-client"
-version = "1.0.9"
+version = "1.0.41"
 description = "DTC Query API"
 optional = false
-python-versions = ">=3.10"
+python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "dtc_query_client-1.0.9-py3-none-any.whl", hash = "sha256:e3c6ffb2ff1fd92e6592d574b3a3339ab4448512c8ada74858946d061a12f568"},
-    {file = "dtc_query_client-1.0.9.tar.gz", hash = "sha256:135c8f259e8c6895e45678df2c93496bf87a95b9f973ba065651521a8e25d561"},
+    {file = "dtc_query_client-1.0.41-py3-none-any.whl", hash = "sha256:82c2ecf421f49edba6ff56e29e2d9409a099e8eaccaf558a9f470d830a8a220d"},
+    {file = "dtc_query_client-1.0.41.tar.gz", hash = "sha256:1bcabb0e96d9d163b433455d8bd9476f2e399997fa0f5088b275c9be533acc69"},
 ]
 
 [package.dependencies]
@@ -5398,4 +5398,4 @@ remote = ["fsspec (>=2023.10.0)", "obstore (>=0.5.1)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "c6598da3037ebfc6177ef065f55ba5d95d26e3623b8e1eed197f135095ab94e5"
+content-hash = "6ca1612ecd8cafbd4fb98f00db7e0a187f7ee361e4824efede1bbd704b837f7d"
