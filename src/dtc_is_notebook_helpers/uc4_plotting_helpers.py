@@ -646,7 +646,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     predictions = out_ds["predictions"].sel(time=selected_date, method="nearest").values
     target = out_ds["target_patches"].sel(time_r=selected_date, method="nearest").values
 
-    fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": ccrs.SouthPolarStereo()})
+    fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": POLAR})
 
     vmin = np.min([np.min(predictions), np.min(target)])
     vmax = np.max([np.max(predictions), np.max(target)])
@@ -658,36 +658,36 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
                         out_ds.y_era5.values,
                         era5,
                         cmap="viridis",
-                        transform=ccrs.SouthPolarStereo())
+                        transform=POLAR)
     ax[0].set_title("ERA5 T.Precipitation \nnorm[mm/day]", fontsize=14)
     ax[0].coastlines("50m", linewidth=0.5)
     ax[0].set_extent([out_ds.x_era5.values.min(), out_ds.x_era5.values.max(),
                     out_ds.y_era5.values.min(), out_ds.y_era5.values.max()],
-                    crs=ccrs.SouthPolarStereo())
+                    crs=POLAR)
 
     im1 = ax[1].pcolormesh(out_ds.x.values,
                             out_ds.y.values,
                             np.squeeze(target),
                             cmap="coolwarm",
-                            transform=ccrs.SouthPolarStereo(),
+                            transform=POLAR,
                             vmin=vmin, vmax=vmax)
     ax[1].set_title("RACMO reference \n[kg m-2]", fontsize=14)
     ax[1].coastlines("50m", linewidth=0.5)
     ax[1].set_extent([out_ds.x.values.min(), out_ds.x.values.max(),
                         out_ds.y.values.min(), out_ds.y.values.max()],
-                        crs=ccrs.SouthPolarStereo())
+                        crs=POLAR)
 
     im2 = ax[2].pcolormesh(out_ds.x.values,
                         out_ds.y.values,
                         predictions,
                         cmap="coolwarm",
-                        transform=ccrs.SouthPolarStereo(),
+                        transform=POLAR,
                         vmin=vmin, vmax=vmax)
     ax[2].set_title("Predicted SMB \n[kg m-2]", fontsize=14)
     ax[2].coastlines("50m", linewidth=0.5)
     ax[2].set_extent([out_ds.x.values.min(), out_ds.x.values.max(),
                     out_ds.y.values.min(), out_ds.y.values.max()],
-                    crs=ccrs.SouthPolarStereo())
+                    crs=POLAR)
 
     # ── Antartica overview ──────────────────────────────────────────────────────────
     def _extent(x, y, pad_cells=(0, 0)) -> tuple[float, float, float, float]:  # noqa: ANN001
