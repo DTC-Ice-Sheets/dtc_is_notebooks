@@ -5,10 +5,10 @@ on:
     branches:
       - '**'           # Triggers on any branch you push to
       - '!main'        # Excludes main so it only runs during feature development
-    paths:
-      - 'pyproject.toml'
-      - 'poetry.lock'
-      - '.github/workflows/build-dev-tarball.yml'
+    # paths:
+    #   - 'pyproject.toml'
+    #   - 'poetry.lock'
+    #   - '.github/workflows/build-dev-tarball.yml'
   workflow_dispatch:   # Allows manual trigger from the GitHub Actions UI
 
 permissions:
