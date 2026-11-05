@@ -771,8 +771,11 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     if not (date_min <= np.datetime64(selected_date) <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
-    predictions = out_ds["predictions"].sel(time=selected_date, method="nearest").values
-    target = out_ds["target_patches"].sel(time_r=selected_date, method="nearest").values
+    prediction = out_ds["predictions"].sel(time=selected_date, method="nearest")
+    predictions = prediction.values
+    target = reference_on_prediction_time(out_ds).sel(time=prediction.time).values
+    if not np.isfinite(target).any():
+        raise ValueError("No RACMO reference is available for the selected prediction month.")
 
     bias = predictions - target
     diff_vmin = np.nanpercentile(bias, 2)
