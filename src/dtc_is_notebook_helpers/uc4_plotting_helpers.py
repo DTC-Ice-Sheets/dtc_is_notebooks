@@ -21,22 +21,22 @@ build_explorer                 month slider: maps + time series                 
 """
 
 from __future__ import annotations
+
 from datetime import date
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+import pyproj
+import seaborn as sns
 import xarray as xr
 from matplotlib.colors import TwoSlopeNorm
-import seaborn as sns
+from plotly.subplots import make_subplots
 
 try:  # cartopy is only needed for coastlines on the location map
     import cartopy.crs as ccrs
-
-    # EPSG:3031 is a polar stereographic projection with true scale at 71 deg S.
-    # ccrs.SouthPolarStereo() does not set that latitude, so coastlines drawn with it can be
-    # offset from data given in EPSG:3031 metres (verify with `check_polar_projection()`).
     POLAR = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
     HAS_CARTOPY = True
 except ImportError:  # pragma: no cover
@@ -84,7 +84,7 @@ def open_emulator_output(source: str | xr.Dataset) -> xr.Dataset:
         path = str(source)
         try:
             ds = xr.open_zarr(path)
-        except Exception: 
+        except Exception:
             ds = xr.open_dataset(path)
     missing = {"predictions", "x_cropped"} - set(ds.data_vars)
     if missing:
@@ -196,13 +196,11 @@ def era5_label(channel: str) -> str:
 
 def check_polar_projection(lon: float = -65.1279, lat: float = -75.0076) -> None:
     """Print where EPSG:3031 (pyproj) and the cartopy projections put a point, to verify the projection choice."""
-    import pyproj
-
     ref = pyproj.Transformer.from_crs(4326, 3031, always_xy=True).transform(lon, lat)
-    print(f"pyproj EPSG:3031              : x={ref[0]:12.1f} y={ref[1]:12.1f}")
+    print(f"pyproj EPSG:3031              : x={ref[0]:12.1f} y={ref[1]:12.1f}") # noqa: T201
     for name, proj in (("SouthPolarStereo()", ccrs.SouthPolarStereo()), ("POLAR (lat_ts=-71)", POLAR)):
         x, y = proj.transform_point(lon, lat, ccrs.PlateCarree())
-        print(f"cartopy {name:20s}: x={x:12.1f} y={y:12.1f}  (dx={x - ref[0]:9.1f} m)")
+        print(f"cartopy {name:20s}: x={x:12.1f} y={y:12.1f}  (dx={x - ref[0]:9.1f} m)") # noqa: T201
 
 
 # ============================================================================
@@ -290,7 +288,7 @@ def plot_tile_comparison(
     draw(
         axes[0], ds["x_era5"].values, ds["y_era5"].values, era5.values, "viridis", None,
         "ERA5 input\n(model input tile)", era5_label_ or era5_label(era5_channel),
-    )  
+    )
     if has_ref:
         draw(axes[1], ds["x"].values, ds["y"].values, ref.values, SMB_CMAP, norm, "RACMO reference", f"SMB [{units}]")
     else:
@@ -300,7 +298,7 @@ def plot_tile_comparison(
         draw(
             axes[3], ds["x"].values, ds["y"].values, diff.values, DIFF_CMAP, dnorm,
             "Emulator - RACMO", f"bias [{units}]",
-        )  
+        )
     else:
         no_reference(axes[3], "Emulator - RACMO")
     axes[0].set_ylabel("y [km]")
@@ -325,7 +323,7 @@ def plot_tile_comparison(
             mpatches.Rectangle(
                 (ext[0] * scale, ext[2] * scale), (ext[1] - ext[0]) * scale, (ext[3] - ext[2]) * scale,
                 ec=color, fc=color, alpha=0.3, lw=1.2, **kw,
-            )  
+            )
         )
     ax_map.plot(x0 * scale, y0 * scale, "*", ms=14, mfc="gold", mec="k", **kw)
     ax_map.set_title("Tile location", fontsize=13)
@@ -336,7 +334,7 @@ def plot_tile_comparison(
             plt.Line2D([], [], marker="*", ls="", mfc="gold", mec="k", ms=11, label="Requested location"),
         ],
         loc="lower left", fontsize=8,
-    )  
+    )
 
     fig.suptitle(
         f"Glaciated SMB emulator - {when}   ({ds.attrs['lat']:.3f}, {ds.attrs['lon']:.3f})", fontsize=16
@@ -362,7 +360,7 @@ def plot_point_dashboard(
     ds : xr.Dataset
         The emulator output dataset.
     era5_channel : str, optional
-        The ERA5 channel to show in the first map. Default is "tp" (total precipitation). Other channels are possible, but the units will not be updated.
+        The ERA5 channel to show in the first map. Default is "tp" (total precipitation).
     units : str, optional
         The units for the SMB maps and time series. Default is "kg m$^{-2}$".
     figsize : tuple[float, float], optional
@@ -413,7 +411,8 @@ def plot_point_dashboard(
     if len(valid) and valid.index.max() < df.index.max():  # emulator keeps going after RACMO ends
         ax_smb.axvspan(valid.index.max(), df.index.max(), color="0.92", zorder=0)
         mid = valid.index.max() + (df.index.max() - valid.index.max()) / 2
-        ax_smb.text(mid, 0.04, "emulator only:\nno RACMO reference", transform=ax_smb.get_xaxis_transform(), ha="center", va="bottom", color="0.35")
+        ax_smb.text(mid, 0.04, "emulator only:\nno RACMO reference",
+                    transform=ax_smb.get_xaxis_transform(), ha="center", va="bottom", color="0.35")
     elif not len(valid):
         ax_smb.text(0.5, 0.9, "no RACMO reference in this period", transform=ax_smb.transAxes, ha="center")
     ax_smb.set_ylabel(f"SMB [{units}]")
@@ -422,7 +421,8 @@ def plot_point_dashboard(
 
     # --- scatter, coloured by calendar month ---
     if len(both):
-        sc = ax_sc.scatter(both["racmo"], both["emulator"], c=both.index.month, cmap="twilight", s=28, edgecolor="k", lw=0.3)
+        sc = ax_sc.scatter(both["racmo"], both["emulator"],
+                           c=both.index.month, cmap="twilight", s=28, edgecolor="k", lw=0.3)
         lo, hi = both.to_numpy().min(), both.to_numpy().max()
         ax_sc.plot([lo, hi], [lo, hi], "k--", lw=0.8)
         fig.colorbar(sc, ax=ax_sc, label="month", ticks=[1, 4, 7, 10], shrink=0.8, pad=0.02)
@@ -437,9 +437,12 @@ def plot_point_dashboard(
     # --- seasonal cycle: both over the SAME months, plus the full-period emulator ---
     months = np.arange(1, 13)
     if len(both):
-        ax_sea.plot(months, both["racmo"].groupby(both.index.month).mean().reindex(months), color=REF_COLOR, marker="o", label="RACMO")
-        ax_sea.plot(months, both["emulator"].groupby(both.index.month).mean().reindex(months), color=EMU_COLOR, marker="o", label="Emulator (same months)")
-    ax_sea.plot(months, df["emulator"].groupby(df.index.month).mean().reindex(months), color=EMU_COLOR, ls="--", label="Emulator (all months)")
+        ax_sea.plot(months, both["racmo"].groupby(both.index.month).mean().reindex(months),
+                    color=REF_COLOR, marker="o", label="RACMO")
+        ax_sea.plot(months, both["emulator"].groupby(both.index.month).mean().reindex(months),
+                    color=EMU_COLOR, marker="o", label="Emulator (same months)")
+    ax_sea.plot(months, df["emulator"].groupby(df.index.month).mean().reindex(months),
+                color=EMU_COLOR, ls="--", label="Emulator (all months)")
     ax_sea.set_xticks(months, list("JFMAMJJASOND"))
     ax_sea.set_title("Seasonal cycle (mean)", fontsize=12)
     ax_sea.legend(fontsize=8)
@@ -464,7 +467,6 @@ def plot_point_dashboard(
 # Figure 3: interactive explorer (plotly)
 # ============================================================================
 
-
 def build_explorer(
     ds: xr.Dataset,
     *,
@@ -472,7 +474,7 @@ def build_explorer(
     era5_channel: str = "tp",
     units: str = SMB_UNITS,
     height: int = 780,
-):  # -> plotly.graph_objects.Figure
+)-> go.Figure:  # -> plotly.graph_objects.Figure
     """Month slider driving ERA5 precipitation, emulator and RACMO maps with synchronized time series.
 
     Parameters
@@ -482,8 +484,7 @@ def build_explorer(
     stride : int, optional
         Subsample the maps for speed. Default is 2 (every second pixel).
     era5_channel : str, optional
-        The ERA5 channel to show in the first map. Default is "tp" (total precipitation). Other channels are possible, 
-        but the units will not be updated.
+        The ERA5 channel to show in the first map. Default is "tp" (total precipitation).
     units : str, optional
         The units for the SMB maps and time series. Default is "kg m$^{-2}$".
     height : int, optional
@@ -493,9 +494,6 @@ def build_explorer(
     -------
     plotly.graph_objects.Figure
     """
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-
     df = point_series(ds, era5_channel)
     m = skill_metrics(df)
     ref = reference_on_prediction_time(ds)
@@ -572,7 +570,7 @@ def build_explorer(
                 marker={"size": 12, "color": color, "line": {"color": "black", "width": 1.5}},
             ),
             2, 1, secondary_y=secondary_y,
-        )  
+        )
     for j in (1, 2, 3):
         fig.add_trace(
             go.Scatter(
@@ -580,7 +578,7 @@ def build_explorer(
                 marker={"symbol": "star", "size": 13, "color": "gold", "line": {"color": "black", "width": 1}},
             ),
             1, j,
-        )  
+        )
     if np.isfinite(m["rmse"]):  # 13: static +/- RMSE band around the emulator curve (whole-period skill, not per-frame)
         band_x = list(df.index) + list(df.index[::-1])
         band_y = list(df["emulator"] + m["rmse"]) + list((df["emulator"] - m["rmse"])[::-1])
@@ -591,7 +589,7 @@ def build_explorer(
                 name="Emulator \u00b1 RMSE", hoverinfo="skip",
             ),
             2, 1, secondary_y=False,
-        )  
+        )
     frames = [
         go.Frame(
             name=str(i),
@@ -603,7 +601,7 @@ def build_explorer(
                 go.Scatter(x=[times[i]], y=[df["emulator"].iloc[i]]),
                 go.Scatter(x=[times[i]], y=[df[era5_col].iloc[i]]),
             ],
-        )  
+        )
         for i in range(len(times))
     ]
     fig.frames = frames
@@ -636,12 +634,14 @@ def build_explorer(
             "type": "buttons", "direction": "left", "x": 0.0, "y": -0.22, "showactive": False,
             "buttons": [
                 {"label": "Play", "method": "animate",
-                 "args": [None, {"frame": {"duration": 400, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}]},
+                 "args": [None, {"frame": {"duration": 400, "redraw": True}, "fromcurrent": True,
+                                 "transition": {"duration": 0}}]},
                 {"label": "Pause", "method": "animate",
-                 "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}]},
+                 "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate",
+                                   "transition": {"duration": 0}}]},
             ],
         }],
-    )  
+    )
     return fig
 
 
@@ -649,26 +649,26 @@ def build_explorer(
 # Figure 4: plots by single date
 # --------------------------------------------------
 
-def plot_single_date(out_ds: xr.Dataset, date: str) -> None:
+def plot_single_date(out_ds: xr.Dataset, selected_date: str) -> None:
     """Plot ERA5 input, emulator prediction, RACMO reference and overview map for a single date.
-    
+
     Parameters
     ----------
     out_ds : xr.Dataset
         The emulator output dataset.
-    date : str
+    selected_date : str
         The date string in the format 'YYYY-MM-DD' for which to plot the data.
     """
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (np.datetime64(date) > date_min) and np.datetime64(date) < date_max:
-        raise ValueError(f"Date {date} is not in the dataset. Available dates: {out_ds['time'].values}")
+    if not (np.datetime64(selected_date) > date_min) and np.datetime64(selected_date) < date_max:
+        raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
     # select the nearest date in the dataset to the provided date
-    era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=date, method="nearest").values
-    predictions = out_ds["predictions"].sel(time=date, method="nearest").values
-    target = out_ds["target_patches"].sel(time_r=date, method="nearest").values
+    era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=selected_date, method="nearest").values
+    predictions = out_ds["predictions"].sel(time=selected_date, method="nearest").values
+    target = out_ds["target_patches"].sel(time_r=selected_date, method="nearest").values
 
     fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": ccrs.SouthPolarStereo()})
 
@@ -689,6 +689,18 @@ def plot_single_date(out_ds: xr.Dataset, date: str) -> None:
                     out_ds.y_era5.values.min(), out_ds.y_era5.values.max()],
                     crs=ccrs.SouthPolarStereo())
 
+    im1 = ax[1].pcolormesh(out_ds.x.values,
+                            out_ds.y.values,
+                            np.squeeze(target),
+                            cmap="coolwarm",
+                            transform=ccrs.SouthPolarStereo(),
+                            vmin=vmin, vmax=vmax)
+    ax[1].set_title("RACMO reference \n[kg m-2]", fontsize=14)
+    ax[1].coastlines("50m", linewidth=0.5)
+    ax[1].set_extent([out_ds.x.values.min(), out_ds.x.values.max(),
+                        out_ds.y.values.min(), out_ds.y.values.max()],
+                        crs=ccrs.SouthPolarStereo())
+
     im2 = ax[2].pcolormesh(out_ds.x.values,
                         out_ds.y.values,
                         predictions,
@@ -697,19 +709,6 @@ def plot_single_date(out_ds: xr.Dataset, date: str) -> None:
                         vmin=vmin, vmax=vmax)
     ax[2].set_title("Predicted SMB \n[kg m-2]", fontsize=14)
     ax[2].coastlines("50m", linewidth=0.5)
-    ax[2].set_extent([out_ds.x.values.min(), out_ds.x.values.max(),
-                    out_ds.y.values.min(), out_ds.y.values.max()],
-                    crs=ccrs.SouthPolarStereo())
-
-
-    im1 = ax[1].pcolormesh(out_ds.x.values,
-                        out_ds.y.values,
-                        np.squeeze(target),
-                        cmap="coolwarm",
-                        transform=ccrs.SouthPolarStereo(),
-                        vmin=vmin, vmax=vmax)
-    ax[1].set_title("RACMO reference \n[kg m-2]", fontsize=14)
-    ax[1].coastlines("50m", linewidth=0.5)
     ax[2].set_extent([out_ds.x.values.min(), out_ds.x.values.max(),
                     out_ds.y.values.min(), out_ds.y.values.max()],
                     crs=ccrs.SouthPolarStereo())
@@ -723,23 +722,24 @@ def plot_single_date(out_ds: xr.Dataset, date: str) -> None:
         return x.min() - dx / 2 - px, x.max() + dx / 2 + px, y.min() - dy / 2 - py, y.max() + dy / 2 + py
 
 
-    CONTEXT_PAD_H = 16  # rows, top and bottom
-    CONTEXT_PAD_W = 8  # columns, left and right
-    POLAR = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
-    era5_ext = _extent(out_ds["x_era5"], out_ds["y_era5"], pad_cells=(CONTEXT_PAD_W, CONTEXT_PAD_H))
+
+    context_pad_h = 16  # rows, top and bottom
+    context_pad_w = 8  # columns, left and right
+    polar = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
+    era5_ext = _extent(out_ds["x_era5"], out_ds["y_era5"], pad_cells=(context_pad_w, context_pad_h))
     tile_ext = _extent(out_ds["x"], out_ds["y"])
     hw = 2400 * 1e3
     x0, y0 = out_ds.attrs["x_3031"], out_ds.attrs["y_3031"]
-    ax[3].set_extent([x0 - hw, x0 + hw, y0 - hw, y0 + hw], crs=POLAR)
+    ax[3].set_extent([x0 - hw, x0 + hw, y0 - hw, y0 + hw], crs=polar)
     ax[3].coastlines("50m", linewidth=0.6)
     ax[3].gridlines(linewidth=0.3, alpha=0.5)
-    scale, kw = 1.0, {"transform": POLAR}
+    scale, kw = 1.0, {"transform": polar}
 
 
     for ext, color in ((era5_ext, "coral"), (tile_ext, "steelblue")):
         ax[3].add_patch(mpatches.Rectangle(
             (ext[0] * scale, ext[2] * scale), (ext[1] - ext[0]) * scale, (ext[3] - ext[2]) * scale,
-            ec=color, fc=color, alpha=0.3, lw=1.2, **kw) 
+            ec=color, fc=color, alpha=0.3, lw=1.2, **kw)
             )
         ax[3].plot(x0 * scale, y0 * scale, "*", ms=14, mfc="gold", mec="k", **kw)
         ax[3].set_title("Tile location", fontsize=13)
@@ -750,7 +750,7 @@ def plot_single_date(out_ds: xr.Dataset, date: str) -> None:
                 plt.Line2D([], [], marker="*", ls="", mfc="gold", mec="k", ms=11, label="Requested location"),
             ],
             loc="lower left", fontsize=8,
-        ) 
+        )
 
     # colorbar under each plot, except the overview (4th) panel
     for im, axis in ((im0, ax[0]), (im1, ax[1]), (im2, ax[2])):
@@ -766,20 +766,18 @@ def plot_single_date(out_ds: xr.Dataset, date: str) -> None:
 # figure 5: validation
 # -----------------------------------------------------------
 
-def plot_validation(out_ds: xr.Dataset, groud_truth_racmo_ds: xr.Dataset, date: str) -> None:
+def plot_validation(out_ds: xr.Dataset, selected_date: str) -> None:
     """
     Plot the validation results for a given date.
 
-    It plots the bias (predictions - target) and RMSE, as well as a violin plot comparing 
+    It plots the bias (predictions - target) and RMSE, as well as a violin plot comparing
     the distributions of predictions and target values.
 
     Parameters
     ----------
     out_ds : xr.Dataset
         The dataset containing the predictions and target values.
-    groud_truth_racmo_ds : xr.Dataset
-        The dataset containing the ground truth RACMO reference values.
-    date : str
+    selected_date : str
         The date for which to plot the validation results.
 
     Raises
@@ -795,18 +793,18 @@ def plot_validation(out_ds: xr.Dataset, groud_truth_racmo_ds: xr.Dataset, date: 
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (np.datetime64(date) > date_min) and np.datetime64(date) < date_max:
-        raise ValueError(f"Date {date} is not in the dataset. Available dates: {out_ds['time'].values}")
+    if not (np.datetime64(selected_date) > date_min) and np.datetime64(selected_date) < date_max:
+        raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
-    predictions = out_ds["predictions"].sel(time=date, method="nearest").values
-    target = out_ds["target_patches"].sel(time_r=date, method="nearest").values
+    predictions = out_ds["predictions"].sel(time=selected_date, method="nearest").values
+    target = out_ds["target_patches"].sel(time_r=selected_date, method="nearest").values
 
     bias = predictions - target
     diff_vmin = np.nanpercentile(bias, 2)
     diff_vmax = np.nanpercentile(bias, 98)
 
     rmse = np.sqrt(bias ** 2)
-    rmse_max = np.nanpercentile(rmse, 98) 
+    rmse_max = np.nanpercentile(rmse, 98)
 
     fig2 = plt.figure(figsize=(10, 8))                 # taller, for 2 rows
     grid = fig2.add_gridspec(2, 2, height_ratios=[1, 0.8])  # tune height_ratios to taste
@@ -818,28 +816,28 @@ def plot_validation(out_ds: xr.Dataset, groud_truth_racmo_ds: xr.Dataset, date: 
     ]
 
     biaslim = max(abs(diff_vmin), abs(diff_vmax))
-    im0 = ax[0].pcolormesh(out_ds['predictions'].x.values,
-                        out_ds['predictions'].y.values,
+    im0 = ax[0].pcolormesh(out_ds["predictions"].x.values,
+                        out_ds["predictions"].y.values,
                         bias,
                         cmap="PiYG",
                         transform=ccrs.SouthPolarStereo(),
                         vmin=-biaslim, vmax=biaslim)
     ax[0].set_title("Bias: Predictions - Target", fontsize=14)
     ax[0].coastlines("50m", linewidth=0.5)
-    ax[0].set_extent([out_ds['predictions'].x.values.min(), out_ds['predictions'].x.values.max(),
-                    out_ds['predictions'].y.values.min(), out_ds['predictions'].y.values.max()],
+    ax[0].set_extent([out_ds["predictions"].x.values.min(), out_ds["predictions"].x.values.max(),
+                    out_ds["predictions"].y.values.min(), out_ds["predictions"].y.values.max()],
                     crs=ccrs.SouthPolarStereo())
 
-    im1 = ax[1].pcolormesh(out_ds['predictions'].x.values,
-                        out_ds['predictions'].y.values,
+    im1 = ax[1].pcolormesh(out_ds["predictions"].x.values,
+                        out_ds["predictions"].y.values,
                         rmse,
                         cmap="inferno_r",
                         vmin=0.0, vmax=rmse_max,
                         transform=ccrs.SouthPolarStereo())
     ax[1].set_title("RMSE", fontsize=14)
     ax[1].coastlines("50m", linewidth=0.5)
-    ax[1].set_extent([out_ds['predictions'].x.values.min(), out_ds['predictions'].x.values.max(),
-                    out_ds['predictions'].y.values.min(), out_ds['predictions'].y.values.max()],
+    ax[1].set_extent([out_ds["predictions"].x.values.min(), out_ds["predictions"].x.values.max(),
+                    out_ds["predictions"].y.values.min(), out_ds["predictions"].y.values.max()],
                     crs=ccrs.SouthPolarStereo())
 
     # colorbar under each plot, except the overview (4th) panel
@@ -892,7 +890,7 @@ def plot_validation(out_ds: xr.Dataset, groud_truth_racmo_ds: xr.Dataset, date: 
             s=8,
             zorder=3,
         )
-        
+
     # Add boxplots and a manageable sample of individual values.
     ax[2].boxplot(
         [pred, ref],
@@ -932,7 +930,6 @@ def select_location(
         Size of the figure in inches (default is (7, 7)).
 
     Returns
-    
     -------
     dict
         A dictionary containing the selected latitude and longitude with keys 'lat' and 'lon'.
@@ -950,9 +947,9 @@ def select_location(
     selected = {"lat": lat, "lon": lon}
     marker, = ax_sel.plot(lon, lat, "*", ms=14, mfc="gold", mec="k", transform=PLATE)
     label = ax_sel.text(0.02, 0.02, f"lat={lat:.4f}, lon={lon:.4f}", transform=ax_sel.transAxes,
-                         bbox=dict(fc="white", alpha=0.8))
+                         bbox={ "fc": "white", "alpha": 0.8 })
 
-    def on_click(event):  # noqa: ANN001
+    def on_click(event):  # noqa: ANN202, ANN001
         if event.inaxes is not ax_sel or event.xdata is None or event.ydata is None or event.button != 1:
             return
         click_lon, click_lat = PLATE.transform_point(event.xdata, event.ydata, ax_sel.projection)
@@ -964,7 +961,7 @@ def select_location(
         selected.update(lat=click_lat, lon=click_lon)
         marker.set_data([click_lon], [click_lat])
         label.set_text(f"lat={click_lat:.4f}, lon={click_lon:.4f}")
-        print(f"Selected location: LAT={click_lat:.4f}, LON={click_lon:.4f}")
+        print(f"Selected location: LAT={click_lat:.4f}, LON={click_lon:.4f}") # noqa: T201
         fig_sel.canvas.draw_idle()
 
     fig_sel.canvas.mpl_connect("button_press_event", on_click)
