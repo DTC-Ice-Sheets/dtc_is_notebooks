@@ -936,7 +936,6 @@ class TestSelectLocation:
     def _no_show_no_coast(self, monkeypatch):
         """Prevent the tests from showing a matplotlib window and from trying to draw coastlines."""
         monkeypatch.setattr(plt, "show", lambda *a, **k: None)
-        monkeypatch.setattr(plt, "coastlines", lambda *a, **k: None)
 
     @staticmethod
     def _click(fig, ax, lon, lat, button=1):
