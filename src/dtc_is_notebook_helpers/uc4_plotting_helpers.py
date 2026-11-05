@@ -7,21 +7,20 @@ re-projection is needed.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
-import matplotlib.patches as mpatches
+import cartopy.crs as ccrs
 import matplotlib as mpl
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from datetime import datetime
 import plotly.graph_objects as go
 import pyproj
 import seaborn as sns
 import xarray as xr
 from matplotlib.colors import TwoSlopeNorm
 from plotly.subplots import make_subplots
-import cartopy.crs as ccrs
 
 POLAR = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
 
