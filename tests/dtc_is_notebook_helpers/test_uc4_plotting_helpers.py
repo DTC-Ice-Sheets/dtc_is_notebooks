@@ -112,15 +112,6 @@ def offline_coastlines(monkeypatch):
     monkeypatch.setattr(GeoAxes, "coastlines", lambda self, *a, **k: None)
 
 
-def _texts(fig: Figure) -> list[str]:
-    """All text strings drawn in a figure (axes titles, annotations, labels)."""
-    out = [fig._suptitle.get_text()] if fig._suptitle is not None else []
-    for ax in fig.axes:
-        out += [ax.get_title(), ax.get_xlabel(), ax.get_ylabel()]
-        out += [t.get_text() for t in ax.texts]
-    return out
-
-
 # ----------------------------------------------------------------------------
 # find_output_path
 # ----------------------------------------------------------------------------
@@ -166,45 +157,6 @@ def test_find_output_path(outputs, name, expected):
             h.find_output_path(outputs, name)
     else:
         assert h.find_output_path(outputs, name) == expected
-
-
-# ----------------------------------------------------------------------------
-# open_emulator_output
-# ----------------------------------------------------------------------------
-
-
-def test_open_emulator_output_accepts_open_dataset(ds):
-    """Test that the function accepts an open xarray Dataset."""
-    out = h.open_emulator_output(ds)
-    assert isinstance(out, xr.Dataset)
-    xr.testing.assert_identical(out, ds)
-
-
-@pytest.mark.parametrize("missing", ["predictions", "x_cropped"])
-def test_open_emulator_output_missing_required_variable_raises(ds, missing):
-    """Test that the function raises a KeyError when a required variable is missing."""
-    with pytest.raises(KeyError, match=missing):
-        h.open_emulator_output(ds.drop_vars(missing))
-
-
-def test_open_emulator_output_target_patches_is_optional(ds_no_racmo):
-    """Test that the function does not raise when target_patches is missing."""
-    assert "target_patches" not in h.open_emulator_output(ds_no_racmo)
-
-
-def test_open_emulator_output_reads_zarr_store(ds, tmp_path):
-    """Test that the function can read a zarr store."""
-    pytest.importorskip("zarr")
-    path = tmp_path / "out.zarr"
-    ds.to_zarr(path)
-    out = h.open_emulator_output(str(path))
-    np.testing.assert_allclose(out["predictions"].values, ds["predictions"].values)
-
-
-def test_open_emulator_output_nonexistent_path_raises(tmp_path):
-    """Test that the function raises an exception when the path does not exist."""
-    with pytest.raises(Exception):  # noqa: B017, PT011 - backend-specific (FileNotFoundError / ValueError)
-        h.open_emulator_output(str(tmp_path / "nope.nc"))
 
 
 # ----------------------------------------------------------------------------
@@ -428,62 +380,6 @@ def test_skill_metrics_on_synthetic_dataset(ds):
 
 
 # ----------------------------------------------------------------------------
-# annual_totals
-# ----------------------------------------------------------------------------
-
-
-def _annual_df(start, periods, racmo=1.0, emulator=2.0):
-    """Create a DataFrame with the given start date, periods, and values."""
-    idx = pd.date_range(start, periods=periods, freq="MS")
-    return pd.DataFrame({"racmo": racmo, "emulator": emulator}, index=idx)
-
-
-def test_annual_totals_complete_years_are_summed():
-    """Test that complete years are summed correctly."""
-    out = h.annual_totals(_annual_df("2020-01-01", 24))
-    assert list(out.index) == [2020, 2021]
-    assert out["racmo"].tolist() == [12.0, 12.0]
-    assert out["emulator"].tolist() == [24.0, 24.0]
-
-
-def test_annual_totals_partial_year_is_nan():
-    """Test that a partial year is returned as NaN."""
-    out = h.annual_totals(_annual_df("2020-01-01", 18))
-    assert out.loc[2020, "racmo"] == 12.0
-    assert np.isnan(out.loc[2021, "racmo"])
-    assert np.isnan(out.loc[2021, "emulator"])
-
-
-def test_annual_totals_missing_month_inside_year_gives_nan():
-    """Test that a missing month inside a year results in NaN for that year."""
-    df = _annual_df("2020-01-01", 12)
-    df.iloc[5, df.columns.get_loc("racmo")] = np.nan
-    out = h.annual_totals(df)
-    assert np.isnan(out.loc[2020, "racmo"])
-    assert out.loc[2020, "emulator"] == 24.0  # other column unaffected
-
-
-def test_annual_totals_columns_are_racmo_and_emulator_only():
-    """Test that the returned DataFrame has only the 'racmo' and 'emulator' columns."""
-    df = _annual_df("2020-01-01", 12)
-    df["era5_tp"] = 5.0
-    assert list(h.annual_totals(df).columns) == ["racmo", "emulator"]
-
-
-def test_annual_totals_year_not_starting_in_january_is_not_complete():
-    """Test that a year not starting in January is considered incomplete and returns NaN."""
-    out = h.annual_totals(_annual_df("2020-07-01", 12))  # Jul-Dec 2020 + Jan-Jun 2021
-    assert out.isna().all().all()
-
-
-def test_annual_totals_on_synthetic_dataset(ds):
-    """Test the annual totals on a synthetic dataset."""
-    out = h.annual_totals(h.point_series(ds))
-    assert out["emulator"].notna().all()  # emulator has two full years
-    assert out["racmo"].notna().tolist() == [True, False]  # RACMO ends in June 2021
-
-
-# ----------------------------------------------------------------------------
 # _smb_norm
 # ----------------------------------------------------------------------------
 
@@ -559,18 +455,8 @@ def test_era5_label_mentions_raw_input():
 
 
 # ----------------------------------------------------------------------------
-# check_polar_projection
+# POLAR projection
 # ----------------------------------------------------------------------------
-
-
-def test_check_polar_projection_prints_one_line_per_projection(capsys):
-    """Test that the function prints one line per projection and includes the expected information."""
-    h.check_polar_projection()
-    lines = capsys.readouterr().out.strip().splitlines()
-    assert len(lines) == 3
-    assert lines[0].startswith("pyproj EPSG:3031")
-    assert "SouthPolarStereo()" in lines[1]
-    assert "POLAR" in lines[2]
 
 
 def test_polar_projection_matches_epsg3031():
@@ -593,203 +479,6 @@ def test_cartopy_default_south_polar_stereo_does_not_match_epsg3031():
     ref = pyproj.Transformer.from_crs(4326, 3031, always_xy=True).transform(lon, lat)
     x, _ = ccrs.SouthPolarStereo().transform_point(lon, lat, ccrs.PlateCarree())
     assert abs(x - ref[0]) > 10_000
-
-
-# ----------------------------------------------------------------------------
-# plot_tile_comparison
-# ----------------------------------------------------------------------------
-
-
-def test_plot_tile_comparison_returns_figure_without_cartopy_path(ds):
-    """Test that the function returns a matplotlib Figure when coastlines are not requested."""
-    fig = h.plot_tile_comparison(ds, coastlines=False)
-    assert isinstance(fig, Figure)
-
-
-def test_plot_tile_comparison_returns_figure_with_cartopy_path(ds):
-    """Test that the function returns a matplotlib Figure with GeoAxes when coastlines are requested."""
-    fig = h.plot_tile_comparison(ds, coastlines=True)
-    assert isinstance(fig, Figure)
-    assert any(type(a).__name__ == "GeoAxes" for a in fig.axes)
-
-
-def test_plot_tile_comparison_suptitle_has_month_and_coordinates(ds):
-    """Test that the figure's suptitle includes the month and coordinates."""
-    fig = h.plot_tile_comparison(ds, 2, coastlines=False)
-    title = fig._suptitle.get_text()
-    assert "2020-03" in title
-    assert "-75.008" in title
-    assert "-65.128" in title
-
-
-def test_plot_tile_comparison_integer_and_date_string_select_the_same_month(ds):
-    """Test that selecting a month by integer index or by date string yields the same suptitle."""
-    a = h.plot_tile_comparison(ds, 5, coastlines=False)._suptitle.get_text()
-    b = h.plot_tile_comparison(ds, "2020-06-15", coastlines=False)._suptitle.get_text()
-    assert a == b
-
-
-def test_plot_tile_comparison_no_placeholder_when_reference_exists(ds):
-    """Test that no placeholder text is shown when RACMO reference data exists for the selected month."""
-    texts = _texts(h.plot_tile_comparison(ds, 0, coastlines=False))
-    assert not any("No RACMO reference" in t for t in texts)
-
-
-def test_plot_tile_comparison_placeholder_for_month_without_racmo(ds):
-    """Test that a placeholder text is shown for months where RACMO reference data does not exist."""
-    texts = _texts(h.plot_tile_comparison(ds, N_RACMO + 2, coastlines=False))
-    assert sum("No RACMO reference" in t for t in texts) == 2  # reference panel and difference panel
-
-
-def test_plot_tile_comparison_placeholder_when_racmo_is_absent_entirely(ds_no_racmo):
-    """Test that a placeholder text is shown when RACMO reference data is absent entirely."""
-    fig = h.plot_tile_comparison(ds_no_racmo, coastlines=False)
-    assert sum("No RACMO reference" in t for t in _texts(fig)) == 2
-
-
-def test_plot_tile_comparison_custom_units_reach_the_colourbars(ds):
-    """Test that custom units specified in the function call appear in the colourbar labels."""
-    fig = h.plot_tile_comparison(ds, coastlines=False, units="mm w.e.")
-    assert any("mm w.e." in t for t in _texts(fig))
-
-
-def test_plot_tile_comparison_custom_era5_label(ds):
-    """Test that a custom label for the ERA5 panel is used when specified."""
-    fig = h.plot_tile_comparison(ds, coastlines=False, era5_label_="MY LABEL")
-    assert "MY LABEL" in _texts(fig)
-
-
-def test_plot_tile_comparison_other_era5_channel_uses_its_units(ds):
-    """Test that specifying a different ERA5 channel results in the correct units appearing in the colourbar."""
-    fig = h.plot_tile_comparison(ds, coastlines=False, era5_channel="t2m")
-    assert any("t2m" in t and "[K]" in t for t in _texts(fig))
-
-
-def test_plot_tile_comparison_colour_scale_is_fixed_over_time(ds):
-    """Moving through months must not rescale the colours (norm built from the whole period)."""
-
-    def limits(t):
-        fig = h.plot_tile_comparison(ds, t, coastlines=False)
-        meshes = [c for ax in fig.axes for c in ax.collections if c.get_cmap().name == h.SMB_CMAP]
-        return {(c.norm.vmin, c.norm.vmax) for c in meshes}
-
-    assert limits(0) == limits(10)
-
-
-def test_plot_tile_comparison_smb_maps_share_one_norm(ds):
-    """All SMB maps in the figure must share the same norm object for consistent colour mapping."""
-    fig = h.plot_tile_comparison(ds, 0, coastlines=False)
-    # RACMO map, emulator map and their colourbars all reference the very same norm object
-    norms = {id(c.norm): c.norm for ax in fig.axes for c in ax.collections if c.get_cmap().name == h.SMB_CMAP}
-    assert len(norms) == 1
-    (norm,) = norms.values()
-    assert norm.vmin < 0 < norm.vmax
-
-
-def test_plot_tile_comparison_constant_zero_fields_do_not_crash(ds):
-    """Test that the function does not crash when all fields are constant zero."""
-    ds["predictions"][:] = 0.0
-    ds["target_patches"][:] = 0.0
-    assert isinstance(h.plot_tile_comparison(ds, coastlines=False), Figure)
-
-
-def test_plot_tile_comparison_nan_in_era5_tile_does_not_crash(ds):
-    """Test that the function does not crash when there are NaN values in the ERA5 tile."""
-    ds["x_cropped"][0, 0, 0, 0] = np.nan
-    assert isinstance(h.plot_tile_comparison(ds, 0, coastlines=False), Figure)
-
-
-def test_plot_tile_comparison_custom_figsize(ds):
-    """Test that the function respects a custom figure size."""
-    fig = h.plot_tile_comparison(ds, coastlines=False, figsize=(10, 4))
-    assert tuple(fig.get_size_inches()) == (10, 4)
-
-
-# ----------------------------------------------------------------------------
-# plot_point_dashboard
-# ----------------------------------------------------------------------------
-
-
-def test_plot_point_dashboard_returns_figure(ds):
-    """Test that the function returns a matplotlib Figure."""
-    assert isinstance(h.plot_point_dashboard(ds), Figure)
-
-
-def test_plot_point_dashboard_suptitle_has_coordinates(ds):
-    """Test that the figure's suptitle includes the coordinates of the point."""
-    title = h.plot_point_dashboard(ds)._suptitle.get_text()
-    assert "-75.008" in title
-    assert "-65.128" in title
-
-
-def test_plot_point_dashboard_panel_titles(ds):
-    """Test that the figure contains the expected panel titles."""
-    titles = _texts(h.plot_point_dashboard(ds))
-    assert any(t.startswith("INPUT:") for t in titles)
-    assert "OUTPUT: monthly SMB at the requested location" in titles
-    assert "Agreement (1:1 dashed)" in titles
-    assert "Seasonal cycle (mean)" in titles
-    assert "Annual totals (complete years)" in titles
-
-
-def test_plot_point_dashboard_metrics_annotation_in_scatter(ds):
-    """Test that the scatter plot contains an annotation with the skill metrics."""
-    texts = _texts(h.plot_point_dashboard(ds))
-    note = next(t for t in texts if t.startswith(f"n={N_RACMO}"))
-    assert "bias=-0.5" in note
-    assert "RMSE=0.5" in note
-    assert "r=1.00" in note
-
-
-def test_plot_point_dashboard_emulator_only_shading_when_racmo_ends_early(ds):
-    """Test that the figure contains a shaded area indicating 'emulator only' when RACMO ends early."""
-    assert any("emulator only" in t for t in _texts(h.plot_point_dashboard(ds)))
-
-
-def test_plot_point_dashboard_no_emulator_only_label_when_racmo_covers_everything():
-    """Test that the figure does not contain an 'emulator only' label when RACMO covers the entire period."""
-    ds = make_dataset(n_racmo=N_TIME)
-    assert not any("emulator only" in t for t in _texts(h.plot_point_dashboard(ds)))
-
-
-def test_plot_point_dashboard_without_racmo(ds_no_racmo):
-    """Test that the figure contains a placeholder text when RACMO reference data is absent."""
-    fig = h.plot_point_dashboard(ds_no_racmo)
-    texts = _texts(fig)
-    assert "no RACMO reference in this period" in texts
-    assert not any(t.startswith("n=") for t in texts)  # no scatter stats
-
-
-def test_plot_point_dashboard_short_record_without_complete_year(ds):
-    """Test that the function handles a short record without a complete year."""
-    short = ds.isel(time=slice(0, 6))
-    assert isinstance(h.plot_point_dashboard(short), Figure)
-
-
-def test_plot_point_dashboard_single_month(ds):
-    """Test that the function handles a single month of data."""
-    assert isinstance(h.plot_point_dashboard(ds.isel(time=slice(0, 1))), Figure)
-
-
-def test_plot_point_dashboard_other_channel_and_units(ds):
-    """Test that specifying a different ERA5 channel and units results in the correct labels in the figure."""
-    fig = h.plot_point_dashboard(ds, era5_channel="t2m", units="mm w.e.")
-    texts = _texts(fig)
-    assert any("t2m" in t for t in texts)
-    assert any("mm w.e." in t for t in texts)
-
-
-def test_plot_point_dashboard_annual_bar_chart_has_complete_years_only(ds):
-    """Test that the annual bar chart only includes complete years and matches the computed annual totals."""
-    fig = h.plot_point_dashboard(ds)
-    ann_ax = next(ax for ax in fig.axes if ax.get_title() == "Annual totals (complete years)")
-    heights = [p.get_height() for p in ann_ax.patches]  # column by column: RACMO 2020, 2021, Emulator 2020, 2021
-    ann = h.annual_totals(h.point_series(ds))
-    assert len(heights) == 4
-    assert heights[0] == pytest.approx(ann.loc[2020, "racmo"])
-    assert heights[1] == 0  # incomplete RACMO year is NaN, which pandas draws as a zero-height bar
-    assert heights[2] == pytest.approx(ann.loc[2020, "emulator"])
-    assert heights[3] == pytest.approx(ann.loc[2021, "emulator"])
 
 
 # ----------------------------------------------------------------------------

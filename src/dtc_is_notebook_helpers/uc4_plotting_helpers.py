@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import pyproj
 import seaborn as sns
 import xarray as xr
 from matplotlib.colors import TwoSlopeNorm
@@ -31,7 +30,6 @@ CONTEXT_PAD_W = 8  # columns, left and right
 REF_COLOR = "#0072b2"  # RACMO
 EMU_COLOR = "#d55e00"  # emulator
 SMB_CMAP = "RdBu"  # blue = net accumulation, red = net loss (same as the dashboard)
-DIFF_CMAP = "PuOr"  # purple = emulator higher than RACMO, orange = lower
 ERA5_UNITS = {"tp": "m", "t2m": "K", "d2m": "K", "sst": "K", "sp": "Pa", "msl": "Pa", "u10": "m/s", "v10": "m/s"}
 SMB_UNITS = "kg m$^{-2}$"  # check against your product; the dashboard labels some SMB layers mm w.e.
 
@@ -88,22 +86,6 @@ def find_output_path(outputs: dict, name: str) -> str:
         found = "none" if not matches else f"{len(matches)} ({matches})"
         raise ValueError(f"Expected exactly one output named like '{name}', found {found}. Outputs: {candidates}")
     return matches[0]
-
-
-def open_emulator_output(source: str | xr.Dataset) -> xr.Dataset:
-    """Load the emulator output (zarr store, netCDF file or an already open Dataset) into memory."""
-    if isinstance(source, xr.Dataset):
-        ds = source
-    else:
-        path = str(source)
-        try:
-            ds = xr.open_zarr(path)
-        except Exception:
-            ds = xr.open_dataset(path)
-    missing = {"predictions", "x_cropped"} - set(ds.data_vars)
-    if missing:
-        raise KeyError(f"Missing variables {sorted(missing)}; found {list(ds.data_vars)}")
-    return ds.load()
 
 
 # ============================================================================
@@ -174,18 +156,6 @@ def skill_metrics(df: pd.DataFrame) -> dict:
     }
 
 
-def annual_totals(df: pd.DataFrame) -> pd.DataFrame:
-    """Sum of the monthly values per year; NaN unless the year has all 12 months (no partial years)."""
-    return pd.DataFrame({c: df[c].groupby(df.index.year).sum(min_count=12) for c in ("racmo", "emulator")})
-
-
-def _time_index(ds: xr.Dataset, t) -> int:  # noqa: ANN001
-    """Accept an integer index or anything pandas can parse as a date ('2021-07')."""
-    if isinstance(t, (int, np.integer)):
-        return int(t)
-    return int(np.abs(ds["time"].values - np.datetime64(pd.Timestamp(t))).argmin())
-
-
 def _extent(x, y, pad_cells=(0, 0)) -> tuple[float, float, float, float]:  # noqa: ANN001
     """Outer edges (xmin, xmax, ymin, ymax) of a regular grid from its cell CENTRES, optionally padded."""
     x, y = np.asarray(x, float), np.asarray(y, float)
@@ -208,271 +178,8 @@ def era5_label(channel: str) -> str:
     return f"ERA5 {channel} [{ERA5_UNITS.get(channel, '?')}]  (raw input)"
 
 
-def check_polar_projection(lon: float = -65.1279, lat: float = -75.0076) -> None:
-    """Print where EPSG:3031 (pyproj) and the cartopy projections put a point, to verify the projection choice."""
-    ref = pyproj.Transformer.from_crs(4326, 3031, always_xy=True).transform(lon, lat)
-    print(f"pyproj EPSG:3031              : x={ref[0]:12.1f} y={ref[1]:12.1f}") # noqa: T201
-    for name, proj in (("SouthPolarStereo()", ccrs.SouthPolarStereo()), ("POLAR (lat_ts=-71)", POLAR)):
-        x, y = proj.transform_point(lon, lat, ccrs.PlateCarree())
-        print(f"cartopy {name:20s}: x={x:12.1f} y={y:12.1f}  (dx={x - ref[0]:9.1f} m)") # noqa: T201
-
-
 # ============================================================================
-# Figure 1: one month, spatial comparison
-# ============================================================================
-
-
-def plot_tile_comparison(
-    ds: xr.Dataset,
-    t=0,  # noqa: ANN001 - int index or date string
-    *,
-    coastlines: bool = True,
-    coast_resolution: str = "50m",
-    overview_halfwidth_km: float = 1200,
-    era5_channel: str = "tp",
-    era5_label_: str | None = None,
-    units: str = SMB_UNITS,
-    figsize: tuple[float, float] = (21, 5.6),
-) -> plt.Figure:
-    """ERA5 input | RACMO reference | emulator | emulator - RACMO | where the tile is.
-
-    RACMO and emulator share ONE colour scale centred on zero, so colours are directly comparable. The scale
-    is fixed over the whole period, so the colours do not jump when you move through months.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        The emulator output dataset.
-    t : int or str, optional
-        The time index or date string for the month to plot. Default is 0.
-    coastlines : bool, optional
-        Whether to draw coastlines on the map. Default is True.
-    coast_resolution : str, optional
-        The resolution of the coastlines. Default is "50m".
-    overview_halfwidth_km : float, optional
-        The half-width of the overview map in kilometers. Default is 1200.
-    era5_channel : str, optional
-        The ERA5 channel to show in the first map. Default is "tp" (total precipitation).
-    era5_label_ : str or None, optional
-        The label for the ERA5 channel. If None, a default label will be generated.
-    units : str, optional
-        The units for the SMB maps and time series. Default is "kg m$^{-2}$".
-    figsize : tuple[float, float], optional
-        The size of the figure in inches. Default is (21, 5.6).
-
-    Returns
-    -------
-    plt.Figure
-        The generated figure.
-    """
-    ti = _time_index(ds, t)
-    when = pd.Timestamp(ds["time"].values[ti]).strftime("%Y-%m")
-    ref_all = reference_on_prediction_time(ds)
-    pred, ref = ds["predictions"].isel(time=ti), ref_all.isel(time=ti)
-    has_ref = bool(np.isfinite(ref.values).any())
-    diff = pred - ref
-    era5 = ds["x_cropped"].sel(channels=era5_channel).isel(time=ti)
-    x0, y0 = ds.attrs["x_3031"], ds.attrs["y_3031"]
-
-    norm = _smb_norm(ds["predictions"].values, ref_all.values)
-    dlim = float(np.nanpercentile(np.abs(diff.values), 98)) if has_ref else 1.0
-    dnorm = TwoSlopeNorm(vmin=-max(dlim, 1e-6), vcenter=0.0, vmax=max(dlim, 1e-6))
-
-    fig = plt.figure(figsize=figsize, constrained_layout=True)
-    gs = fig.add_gridspec(1, 5, width_ratios=[1, 1, 1, 1, 1.1])
-    axes = [fig.add_subplot(gs[0, i]) for i in range(4)]
-    ax_map = fig.add_subplot(gs[0, 4], projection=POLAR)
-
-    def draw(ax, xc, yc, field, cmap, norm_, title, label):  # noqa: ANN001, ANN202
-        im = ax.pcolormesh(xc / 1e3, yc / 1e3, field, cmap=cmap, norm=norm_, shading="nearest")
-        ax.set_title(title, fontsize=13)
-        ax.set_aspect("equal")
-        ax.set_anchor("S")  # equal aspect shrinks the axes; keep them at the bottom so the colourbar stays attached
-        ax.set_xlabel("x [km]  (EPSG:3031)")
-        ax.plot(x0 / 1e3, y0 / 1e3, "*", ms=14, mfc="gold", mec="k", zorder=5)  # requested location
-        fig.colorbar(im, ax=ax, orientation="horizontal", pad=0.04, shrink=0.9, aspect=30).set_label(label)
-
-    def no_reference(ax, title):  # noqa: ANN001, ANN202
-        ax.set_title(title, fontsize=13)
-        ax.text(0.5, 0.5, "No RACMO reference\nfor this month", transform=ax.transAxes, ha="center", va="center")
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    draw(
-        axes[0], ds["x_era5"].values, ds["y_era5"].values, era5.values, "viridis", None,
-        "ERA5 input\n(model input tile)", era5_label_ or era5_label(era5_channel),
-    )
-    if has_ref:
-        draw(axes[1], ds["x"].values, ds["y"].values, ref.values, SMB_CMAP, norm, "RACMO reference", f"SMB [{units}]")
-    else:
-        no_reference(axes[1], "RACMO reference")
-    draw(axes[2], ds["x"].values, ds["y"].values, pred.values, SMB_CMAP, norm, "Emulator", f"SMB [{units}]")
-    if has_ref:
-        draw(
-            axes[3], ds["x"].values, ds["y"].values, diff.values, DIFF_CMAP, dnorm,
-            "Emulator - RACMO", f"bias [{units}]",
-        )
-    else:
-        no_reference(axes[3], "Emulator - RACMO")
-    axes[0].set_ylabel("y [km]")
-
-    # --- location map: model output tile (blue), full ERA5 input footprint (orange), requested point ---
-    era5_ext = _extent(ds["x_era5"], ds["y_era5"], pad_cells=(CONTEXT_PAD_W, CONTEXT_PAD_H))
-    tile_ext = _extent(ds["x"], ds["y"])
-    hw = overview_halfwidth_km * 1e3
-
-    ax_map.set_extent([x0 - hw, x0 + hw, y0 - hw, y0 + hw], crs=POLAR)
-    ax_map.coastlines(coast_resolution, linewidth=0.6)
-    ax_map.gridlines(linewidth=0.3, alpha=0.5)
-    scale, kw = 1.0, {"transform": POLAR}
-
-    for ext, color in ((era5_ext, "coral"), (tile_ext, "steelblue")):
-        ax_map.add_patch(
-            mpatches.Rectangle(
-                (ext[0] * scale, ext[2] * scale), (ext[1] - ext[0]) * scale, (ext[3] - ext[2]) * scale,
-                ec=color, fc=color, alpha=0.3, lw=1.2, **kw,
-            )
-        )
-    ax_map.plot(x0 * scale, y0 * scale, "*", ms=14, mfc="gold", mec="k", **kw)
-    ax_map.set_title("Tile location", fontsize=13)
-    ax_map.legend(
-        handles=[
-            mpatches.Patch(fc="steelblue", alpha=0.4, label="Emulator output tile"),
-            mpatches.Patch(fc="coral", alpha=0.4, label="ERA5 input footprint"),
-            plt.Line2D([], [], marker="*", ls="", mfc="gold", mec="k", ms=11, label="Requested location"),
-        ],
-        loc="lower left", fontsize=8,
-    )
-
-    fig.suptitle(
-        f"Glaciated SMB emulator - {when}   ({ds.attrs['lat']:.3f}, {ds.attrs['lon']:.3f})", fontsize=16
-    )
-    return fig
-
-
-# ============================================================================
-# Figure 2: the requested location through time
-# ============================================================================
-
-
-def plot_point_dashboard(
-    ds: xr.Dataset,
-    era5_channel: str = "tp",
-    units: str = SMB_UNITS,
-    figsize: tuple[float, float] = (16, 10.5),
-) -> plt.Figure:
-    """Input, emulator vs RACMO, bias, and skill diagnostics at the requested location.
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        The emulator output dataset.
-    era5_channel : str, optional
-        The ERA5 channel to show in the first map. Default is "tp" (total precipitation).
-    units : str, optional
-        The units for the SMB maps and time series. Default is "kg m$^{-2}$".
-    figsize : tuple[float, float], optional
-        The size of the figure in inches. Default is (16, 10.5).
-
-    Returns
-    -------
-    plt.Figure
-        The generated figure.
-    """
-    df = point_series(ds, era5_channel)
-    m = skill_metrics(df)
-    both = df[["racmo", "emulator"]].dropna()
-
-    fig = plt.figure(figsize=figsize, constrained_layout=True)
-    gs = fig.add_gridspec(3, 3, height_ratios=[0.8, 1.7, 1.5])
-    ax_in = fig.add_subplot(gs[0, :])
-    ax_smb = fig.add_subplot(gs[1, :], sharex=ax_in)
-    ax_sc = fig.add_subplot(gs[2, 0])
-    ax_sea = fig.add_subplot(gs[2, 1])
-    ax_ann = fig.add_subplot(gs[2, 2])
-
-    # --- input: ERA5 tile mean ---
-    col = f"era5_{era5_channel}"
-    ax_in.plot(df.index, df[col], color="#009e73", lw=1.5)
-    ax_in.fill_between(df.index, df[col], alpha=0.15, color="#009e73")
-    ax_in.set_title(f"INPUT: {era5_label(era5_channel)}, mean over the input tile", fontsize=13)
-    ax_in.tick_params(labelbottom=False)
-
-    # --- output: emulator vs RACMO, same axes so the comparison is direct ---
-    ax_smb.plot(df.index, df["racmo"], color=REF_COLOR, lw=1.8, label="RACMO reference")
-    ax_smb.plot(df.index, df["emulator"], color=EMU_COLOR, lw=1.8, label="Emulator")
-    if np.isfinite(m["rmse"]):
-        ax_smb.fill_between(
-            df.index,
-            df["emulator"] - m["rmse"],
-            df["emulator"] + m["rmse"],
-            color=EMU_COLOR,
-            alpha=0.15,
-            label="Emulator \u00b1 RMSE",
-        )
-    ok = (df["racmo"].notna() & df["emulator"].notna()).to_numpy()
-    ax_smb.fill_between(
-        df.index, df["racmo"], df["emulator"], where=ok, interpolate=True, color="0.5", alpha=0.25, label="difference"
-    )
-    ax_smb.axhline(0, color="k", lw=0.6)
-    valid = df["racmo"].dropna()
-    if len(valid) and valid.index.max() < df.index.max():  # emulator keeps going after RACMO ends
-        ax_smb.axvspan(valid.index.max(), df.index.max(), color="0.92", zorder=0)
-        mid = valid.index.max() + (df.index.max() - valid.index.max()) / 2
-        ax_smb.text(mid, 0.04, "emulator only:\nno RACMO reference",
-                    transform=ax_smb.get_xaxis_transform(), ha="center", va="bottom", color="0.35")
-    elif not len(valid):
-        ax_smb.text(0.5, 0.9, "no RACMO reference in this period", transform=ax_smb.transAxes, ha="center")
-    ax_smb.set_ylabel(f"SMB [{units}]")
-    ax_smb.set_title("OUTPUT: monthly SMB at the requested location", fontsize=13)
-    ax_smb.legend(loc="upper left", ncol=4, fontsize=9)
-
-    # --- scatter, coloured by calendar month ---
-    if len(both):
-        sc = ax_sc.scatter(both["racmo"], both["emulator"],
-                           c=both.index.month, cmap="twilight", s=28, edgecolor="k", lw=0.3)
-        lo, hi = both.to_numpy().min(), both.to_numpy().max()
-        ax_sc.plot([lo, hi], [lo, hi], "k--", lw=0.8)
-        fig.colorbar(sc, ax=ax_sc, label="month", ticks=[1, 4, 7, 10], shrink=0.8, pad=0.02)
-        ax_sc.text(
-            0.04, 0.96, f"n={m['n']}\nbias={m['bias']:+.1f}\nRMSE={m['rmse']:.1f}\nr={m['r']:.2f}",
-            transform=ax_sc.transAxes, va="top", fontsize=9, bbox={"fc": "w", "alpha": 0.8, "ec": "0.7"},
-        )  # fmt: skip
-    ax_sc.set_xlabel("RACMO")
-    ax_sc.set_ylabel("Emulator")
-    ax_sc.set_title("Agreement (1:1 dashed)", fontsize=12)
-
-    # --- seasonal cycle: both over the SAME months, plus the full-period emulator ---
-    months = np.arange(1, 13)
-    if len(both):
-        ax_sea.plot(months, both["racmo"].groupby(both.index.month).mean().reindex(months),
-                    color=REF_COLOR, marker="o", label="RACMO")
-        ax_sea.plot(months, both["emulator"].groupby(both.index.month).mean().reindex(months),
-                    color=EMU_COLOR, marker="o", label="Emulator (same months)")
-    ax_sea.plot(months, df["emulator"].groupby(df.index.month).mean().reindex(months),
-                color=EMU_COLOR, ls="--", label="Emulator (all months)")
-    ax_sea.set_xticks(months, list("JFMAMJJASOND"))
-    ax_sea.set_title("Seasonal cycle (mean)", fontsize=12)
-    ax_sea.legend(fontsize=8)
-
-    # --- annual totals: complete years only ---
-    ann = annual_totals(df)
-    if ann.notna().any().any():
-        ann.rename(columns={"racmo": "RACMO", "emulator": "Emulator"}).plot.bar(
-            ax=ax_ann, color=[REF_COLOR, EMU_COLOR], width=0.8, rot=0
-        )
-        ax_ann.legend(fontsize=8, loc="upper left")
-        ax_ann.margins(y=0.25)  # head-room so the legend never covers a bar
-    ax_ann.set_xlabel("")
-    ax_ann.set_title("Annual totals (complete years)", fontsize=12)
-    ax_ann.set_ylabel(f"[{units} / yr]  (sum of monthly values)")
-
-    fig.suptitle(f"Emulator at ({ds.attrs['lat']:.3f}, {ds.attrs['lon']:.3f})", fontsize=16)
-    return fig
-
-
-# ============================================================================
-# Figure 3: interactive explorer (plotly)
+# Figure 1: interactive explorer (plotly)
 # ============================================================================
 
 def build_explorer(
@@ -654,7 +361,7 @@ def build_explorer(
 
 
 # --------------------------------------------------
-# Figure 4: plots by single date
+# Figure 2: plots by single date
 # --------------------------------------------------
 
 def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.Figure:
@@ -769,7 +476,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
 
 
 # -----------------------------------------------------------
-# figure 5: validation
+# Figure 3: validation
 # -----------------------------------------------------------
 
 def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.Figure:
