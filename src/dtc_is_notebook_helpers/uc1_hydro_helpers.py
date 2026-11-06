@@ -53,13 +53,27 @@ M3S_TO_KM3_PER_DAY = SECONDS_PER_DAY / 1e9
 # --------------------------------------------------------------------------
 
 def catchment_mean(fields: pd.DataFrame, weights: np.ndarray | None = None) -> pd.Series:
-    """Collapse a (time x node) frame to one value per time step.
+    """
+    Collapse a (time x node) frame to one value per time step.
 
     Columns carrying no weight are dropped before the average rather than
     multiplied by zero. On a mesh every node holds a value and the two are the
     same, but a field interpolated onto a regular grid is undefined outside the
     mesh, and NaN times zero is still NaN, which would take the whole average
     with it.
+
+    Parameters
+    ----------
+    fields : pandas.DataFrame
+        Values with time steps as rows and nodes, or grid cells, as columns.
+    weights : numpy.ndarray, optional
+        One weight per column, such as a boolean catchment mask. Every column
+        counts equally by default.
+
+    Returns
+    -------
+    pandas.Series
+        The weighted mean at each time step, named ``runoff``.
     """
     if weights is None:
         series = fields.mean(axis=1)
@@ -75,11 +89,23 @@ def catchment_mean(fields: pd.DataFrame, weights: np.ndarray | None = None) -> p
 
 
 def seasonal_predictor(runoff: pd.Series) -> pd.Series:
-    """Melt-season runoff total, one number per year.
+    """
+    Melt-season runoff total, one number per year.
 
     This is the alternative to the FTS coefficient, and on this catchment it
     predicts discharge rather better. Both are accepted by `ProfileModel`, so
     the notebook can show them side by side.
+
+    Parameters
+    ----------
+    runoff : pandas.Series
+        Catchment-mean runoff, indexed by date.
+
+    Returns
+    -------
+    pandas.Series
+        The melt-season total for each complete season, indexed by year and
+        named ``seasonal_runoff``.
     """
     melt = runoff[runoff.index.month.isin(MELT_MONTHS)]
     counts = melt.groupby(melt.index.year).size()
@@ -99,7 +125,8 @@ def seasonal_predictor(runoff: pd.Series) -> pd.Series:
 
 @dataclass
 class ProfileModel:
-    """Predicts a whole within-season discharge profile from seasonal numbers.
+    """
+    Predicts a whole within-season discharge profile from seasonal numbers.
 
     For each step of the melt season - week 1, week 2, and so on - a linear
     model is fitted across years between the seasonal predictor(s) and the
@@ -187,20 +214,46 @@ class ProfileModel:
 
     # ------------------------------------------------------------ predict --
     def profile(self, values: Values) -> pd.Series:
-        """Discharge through one melt season, m3/s, for one season's predictors."""
+        """
+        Discharge through one melt season, m3/s, for one season's predictors.
+
+        Parameters
+        ----------
+        values : float or array-like
+            One season's predictor values, in the order the model was fitted on.
+
+        Returns
+        -------
+        pandas.Series
+            Discharge in m3/s for each step, indexed by the day of year the step
+            starts. Never negative.
+        """
         row = np.atleast_1d(np.asarray(values, dtype=float)).ravel()
         vector = np.concatenate([[1.0], row])
         return pd.Series(self.coefficients @ vector,
                          index=self.starts, name="m3s").clip(lower=0)
 
     def profiles(self, predictors: Predictors) -> pd.DataFrame:
-        """One profile per year: rows are years, columns day-of-year."""
+        """
+        One profile per year: rows are years, columns day-of-year.
+
+        Parameters
+        ----------
+        predictors : pandas.Series or pandas.DataFrame
+            Predictor values, indexed by year.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Discharge in m3/s, years by step.
+        """
         table = _as_frame(predictors)
         return pd.DataFrame({year: self.profile(row.to_numpy())
                              for year, row in table.iterrows()}).T
 
     def prediction_se(self, values: Values) -> np.ndarray:
-        """Give the standard error of a *new* observation, per step.
+        """
+        Give the standard error of a *new* observation, per step.
 
         A prediction interval is wider than the residual scatter for two
         reasons: the fitted line is itself uncertain, and that uncertainty
@@ -209,6 +262,16 @@ class ProfileModel:
         own when a scenario sits outside the historical range - which is the
         behaviour you want when predicting 2050 from a model trained on
         2006-2020.
+
+        Parameters
+        ----------
+        values : float or array-like
+            One season's predictor values.
+
+        Returns
+        -------
+        numpy.ndarray
+            The standard error for each step, in m3/s.
         """
         row = np.atleast_1d(np.asarray(values, dtype=float)).ravel()
         vector = np.concatenate([[1.0], row])
@@ -218,11 +281,23 @@ class ProfileModel:
         return self.residual_sd * np.sqrt(1.0 + np.clip(leverage, 0.0, None))
 
     def leverage(self, values: Values) -> float:
-        """How far outside the fitted range a predictor sits, as a ratio.
+        """
+        How far outside the fitted range a predictor sits, as a ratio.
 
         1.0 means the band is as wide as it would be at the centre of the
         training data. Larger values mean extrapolation; the number is the
         factor by which the interval has widened in response.
+
+        Parameters
+        ----------
+        values : float or array-like
+            One season's predictor values.
+
+        Returns
+        -------
+        float
+            The ratio of the band width here to the width at the centre of the
+            training data.
         """
         if self.xtx_inv is None:
             return 1.0
@@ -231,7 +306,8 @@ class ProfileModel:
         return float(here / centre) if centre else 1.0
 
     def band(self, values: Values, level: float = 0.68) -> pd.DataFrame:
-        """Prediction interval around one profile.
+        """
+        Prediction interval around one profile.
 
         Pass `level` as the coverage you want - 0.68 for one sigma, 0.95 for
         the interval infrastructure design usually asks for. The multiplier is
@@ -239,6 +315,18 @@ class ProfileModel:
         quantile: with fifteen seasons and two terms there are thirteen
         degrees of freedom, where t is 2.16 against the normal 1.96, so
         assuming normality would understate a 95% band by about ten per cent.
+
+        Parameters
+        ----------
+        values : float or array-like
+            One season's predictor values.
+        level : float, optional
+            Coverage of the interval.
+
+        Returns
+        -------
+        pandas.DataFrame
+            ``lower``, ``predicted`` and ``upper`` for each step, in m3/s.
         """
         centre = self.profile(values)
         spread = pd.Series(self.prediction_se(values) * self._multiplier(level),
@@ -249,7 +337,22 @@ class ProfileModel:
 
     def bands(self, values: Values,
               levels: Sequence[float] = (0.68, 0.95)) -> pd.DataFrame:
-        """Several coverages at once: columns lower_68, upper_68, lower_95, ..."""
+        """
+        Several coverages at once: columns lower_68, upper_68, lower_95, ...
+
+        Parameters
+        ----------
+        values : float or array-like
+            One season's predictor values.
+        levels : sequence of float, optional
+            The coverages to compute.
+
+        Returns
+        -------
+        pandas.DataFrame
+            ``predicted``, plus ``lower_<percent>`` and ``upper_<percent>`` for each
+            level, for each step.
+        """
         out = {"predicted": self.profile(values)}
         for level in levels:
             b = self.band(values, level=level)
@@ -304,11 +407,24 @@ def _as_frame(predictors: Predictors) -> pd.DataFrame:
 
 
 def step_matrix(discharge: pd.Series, step_days: int = 7) -> pd.DataFrame:
-    """Mean discharge in each step of each melt season.
+    """
+    Mean discharge in each step of each melt season.
 
     Rows are years, columns the day-of-year each step begins. Steps are cut on
     day-of-year rather than calendar weeks so that every year lines up, which
     matters for fitting one regression per step across years.
+
+    Parameters
+    ----------
+    discharge : pandas.Series
+        Daily gauge discharge, indexed by date.
+    step_days : int, optional
+        Length of each step in days.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Mean discharge in m3/s, years by step. Years with no data are dropped.
     """
     starts = _step_starts(step_days)
     doy = discharge.index.dayofyear
@@ -328,7 +444,23 @@ def step_matrix(discharge: pd.Series, step_days: int = 7) -> pd.DataFrame:
 
 def leave_one_year_out(discharge: pd.Series, predictors: Predictors,
                        step_days: int = 7) -> pd.DataFrame:
-    """Predict each season's profile from a model that never saw that season."""
+    """
+    Predict each season's profile from a model that never saw that season.
+
+    Parameters
+    ----------
+    discharge : pandas.Series
+        Daily gauge discharge, indexed by date.
+    predictors : pandas.Series or pandas.DataFrame
+        One value per season, or several, indexed by year.
+    step_days : int, optional
+        Length of each step in days.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Years by step, with an ``observed`` and a ``predicted`` column group.
+    """
     table = _as_frame(predictors)
     observed = step_matrix(discharge, step_days)
     years = np.array([y for y in observed.index if y in table.index])
@@ -341,7 +473,19 @@ def leave_one_year_out(discharge: pd.Series, predictors: Predictors,
 
 
 def profile_skill(validation: pd.DataFrame) -> dict:
-    """r2 and RMSE over every step of every held-out season."""
+    """
+    r2 and RMSE over every step of every held-out season.
+
+    Parameters
+    ----------
+    validation : pandas.DataFrame
+        An observed/predicted frame, as `leave_one_year_out` returns.
+
+    Returns
+    -------
+    dict
+        ``n_steps`` the number of steps scored, ``r2``, and ``rmse_m3s``.
+    """
     observed = validation["observed"].to_numpy(dtype=float).ravel()
     predicted = validation["predicted"].to_numpy(dtype=float).ravel()
     keep = np.isfinite(observed) & np.isfinite(predicted)
@@ -358,18 +502,58 @@ def profile_skill(validation: pd.DataFrame) -> dict:
 # --------------------------------------------------------------------------
 
 def annual_total(profile: pd.Series, step_days: int) -> float:
-    """Melt-season volume in km3 from a profile of mean flows."""
+    """
+    Melt-season volume in km3 from a profile of mean flows.
+
+    Parameters
+    ----------
+    profile : pandas.Series
+        Mean flow in m3/s for each step.
+    step_days : int
+        Length of each step in days.
+
+    Returns
+    -------
+    float
+        The melt-season volume in km3.
+    """
     return float(profile.sum() * step_days * M3S_TO_KM3_PER_DAY)
 
 
 def annual_peak(profile: pd.Series) -> tuple[float, int]:
-    """Largest step in a profile, and the day of year it starts."""
+    """
+    Largest step in a profile, and the day of year it starts.
+
+    Parameters
+    ----------
+    profile : pandas.Series
+        Mean flow in m3/s for each step, indexed by the day of year it starts.
+
+    Returns
+    -------
+    tuple of (float, int)
+        The largest flow in m3/s, and the day of year its step starts.
+    """
     idx = int(np.nanargmax(profile.to_numpy()))
     return float(profile.iloc[idx]), int(profile.index[idx])
 
 
 def summarise(profiles: pd.DataFrame, step_days: int) -> pd.DataFrame:
-    """Total, peak and peak timing for every year in a set of profiles."""
+    """
+    Total, peak and peak timing for every year in a set of profiles.
+
+    Parameters
+    ----------
+    profiles : pandas.DataFrame
+        Mean flow in m3/s, years by step.
+    step_days : int
+        Length of each step in days.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``total_km3``, ``peak_m3s`` and ``peak_week_starting``, indexed by year.
+    """
     rows = []
     for year, profile in profiles.iterrows():
         peak, start_doy = annual_peak(profile)
@@ -382,7 +566,22 @@ def summarise(profiles: pd.DataFrame, step_days: int) -> pd.DataFrame:
 
 
 def steps_above(profiles: pd.DataFrame, threshold_m3s: float) -> pd.Series:
-    """Count the steps per year above an operating threshold."""
+    """
+    Count the steps per year above an operating threshold.
+
+    Parameters
+    ----------
+    profiles : pandas.DataFrame
+        Mean flow in m3/s, years by step.
+    threshold_m3s : float
+        The operating threshold, in m3/s.
+
+    Returns
+    -------
+    pandas.Series
+        The number of steps above the threshold for each year, named
+        ``steps_above``.
+    """
     return (profiles > threshold_m3s).sum(axis=1).rename("steps_above")
 
 
@@ -392,7 +591,8 @@ def steps_above(profiles: pd.DataFrame, threshold_m3s: float) -> pd.Series:
 
 @dataclass
 class Scenario:
-    """A future seasonal-predictor distribution to run the model over.
+    """
+    A future seasonal-predictor distribution to run the model over.
 
     `from_perturbation` reshapes the observed predictor distribution: `weight`
     slides the centre between the driest and wettest observed seasons, and
@@ -444,12 +644,23 @@ class Scenario:
                    notes or f"weight {weight:g}, variability {variability:g}")
 
     def run(self, model: ProfileModel) -> pd.DataFrame:
-        """Every year of the scenario as a profile.
+        """
+        Every year of the scenario as a profile.
 
         A model fitted with extra predictors needs values for them too; the
         scenario carries only the climate-model term, so the others are set to
         zero. A future EO dataset does not exist to be perturbed, and zero is
         the value that leaves the climate term carrying the scenario alone.
+
+        Parameters
+        ----------
+        model : ProfileModel
+            The fitted model.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Discharge in m3/s, scenario years by step.
         """
         table = _as_frame(self.values)
         if len(model.names) > table.shape[1]:
@@ -463,7 +674,21 @@ class Scenario:
 
 
 def compare(scenarios: dict[str, pd.DataFrame], step_days: int) -> pd.DataFrame:
-    """One row per scenario: mean, range and peak of the annual totals."""
+    """
+    One row per scenario: mean, range and peak of the annual totals.
+
+    Parameters
+    ----------
+    scenarios : dict of str to pandas.DataFrame
+        Profiles for each scenario, keyed by its name.
+    step_days : int
+        Length of each step in days.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per scenario, indexed by name.
+    """
     rows = []
     for name, profiles in scenarios.items():
         table = summarise(profiles, step_days)
@@ -481,17 +706,31 @@ def compare(scenarios: dict[str, pd.DataFrame], step_days: int) -> pd.DataFrame:
 # --------------------------------------------------------------------------
 
 def catchment_sd(sd_fields: pd.DataFrame, correlated: bool = True) -> pd.Series:
-    """Spread of the catchment mean implied by the GRF posterior, per snapshot.
+    """
+    Spread of the catchment mean implied by the GRF posterior, per snapshot.
 
-    The node-wise spreads are collapsed. That is an
-    approximation with two far-apart limits, because a fitted field is smooth
-    and neighbouring nodes err together:
+    The node-wise spreads are collapsed. That is an approximation with two
+    far-apart limits, because a fitted field is smooth and neighbouring nodes
+    err together:
 
         independent   sd(mean) = sqrt(sum(sd^2)) / n      - optimistic
         correlated    sd(mean) = mean(sd)                 - conservative
 
     `correlated=True` takes the conservative one, which is the right default
     for a number that will be quoted.
+
+    Parameters
+    ----------
+    sd_fields : pandas.DataFrame
+        Posterior standard deviations, time steps by node.
+    correlated : bool, optional
+        True for the conservative limit, False for the independent one.
+
+    Returns
+    -------
+    pandas.Series
+        The spread of the catchment mean for each time step, named
+        ``catchment_sd``.
     """
     values = sd_fields.to_numpy(dtype=float)
     if correlated:
@@ -503,7 +742,8 @@ def catchment_sd(sd_fields: pd.DataFrame, correlated: bool = True) -> pd.Series:
 
 def seasonal_sd(snapshot_sd: pd.Series, years: Years, monthly_values: pd.Series | None = None,
                 log10: bool = True, draws: int = 4000, seed: int = 0) -> pd.Series:
-    """Spread on the seasonal predictor, in the units the predictor is in.
+    """
+    Spread on the seasonal predictor, in the units the predictor is in.
 
     The GRF fits log10 runoff, so its posterior spread is in log10 units, while
     the seasonal predictor is a sum of *back-transformed* monthly catchment
@@ -517,6 +757,27 @@ def seasonal_sd(snapshot_sd: pd.Series, years: Years, monthly_values: pd.Series 
 
     Pass `log10=False` for a predictor already in linear units, and the months
     combine in quadrature as before.
+
+    Parameters
+    ----------
+    snapshot_sd : pandas.Series
+        Spread of the catchment mean for each snapshot.
+    years : sequence of int
+        The season each snapshot belongs to, in the same order.
+    monthly_values : pandas.Series, optional
+        The catchment-mean value of each snapshot, in the same order. Needed to
+        resample a log10 spread.
+    log10 : bool, optional
+        Whether `snapshot_sd` is in log10 units.
+    draws : int, optional
+        Number of Monte Carlo draws per season.
+    seed : int, optional
+        Seed for the generator, so a run is repeatable.
+
+    Returns
+    -------
+    pandas.Series
+        The spread on the seasonal total for each year, named ``seasonal_sd``.
     """
     frame = pd.DataFrame({"sd": snapshot_sd.to_numpy(dtype=float)}, index=list(years))
 
@@ -537,19 +798,31 @@ def seasonal_sd(snapshot_sd: pd.Series, years: Years, monthly_values: pd.Series 
 
 
 def multiplicative_factor(snapshot_sd: pd.Series) -> float:
-    """Give the factor a log10 spread implies, for a sanity check.
+    """
+    Give the factor a log10 spread implies, for a sanity check.
 
     A spread of 0.3 in log10 is a factor of 2; 0.7 is a factor of 5. If this
     comes back large, the quantity the module is reporting is probably not a
     posterior standard deviation of the fitted field, and it is worth asking
     before the number is propagated into anything anyone relies on.
+
+    Parameters
+    ----------
+    snapshot_sd : pandas.Series
+        Spread for each snapshot, in log10 units.
+
+    Returns
+    -------
+    float
+        Ten to the power of the mean spread.
     """
     return float(10.0 ** np.nanmean(snapshot_sd.to_numpy(dtype=float)))
 
 
 def propagate(model: "ProfileModel", value: Values, value_sd: float = 0.0,
               draws: int = 2000, level: float = 0.68, seed: int = 0) -> pd.DataFrame:
-    """Prediction band including harmonisation uncertainty, by Monte Carlo.
+    """
+    Prediction band including harmonisation uncertainty, by Monte Carlo.
 
     Two sources, combined properly rather than added:
 
@@ -562,6 +835,27 @@ def propagate(model: "ProfileModel", value: Values, value_sd: float = 0.0,
     which is what the notebook shows when the module returns no posterior
     spread. The difference between the two bands is exactly the contribution
     harmonisation makes.
+
+    Parameters
+    ----------
+    model : ProfileModel
+        The fitted model.
+    value : float or array-like
+        One season's predictor values.
+    value_sd : float, optional
+        Spread on the predictor. Zero for the fitting uncertainty alone.
+    draws : int, optional
+        Number of Monte Carlo draws.
+    level : float, optional
+        Coverage of the band.
+    seed : int, optional
+        Seed for the generator, so a run is repeatable.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``lower``, ``predicted`` (the mean of the draws) and ``upper`` for each
+        step, in m3/s.
     """
     rng = np.random.default_rng(seed)
     row = np.atleast_1d(np.asarray(value, dtype=float)).ravel()
@@ -583,7 +877,26 @@ def propagate(model: "ProfileModel", value: Values, value_sd: float = 0.0,
 
 def uncertainty_budget(model: "ProfileModel", value: Values, value_sd: float,
                        draws: int = 2000) -> pd.DataFrame:
-    """How wide the band is with and without the harmonisation term."""
+    """
+    How wide the band is with and without the harmonisation term.
+
+    Parameters
+    ----------
+    model : ProfileModel
+        The fitted model.
+    value : float or array-like
+        One season's predictor values.
+    value_sd : float
+        Spread on the predictor from harmonisation.
+    draws : int, optional
+        Number of Monte Carlo draws.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The mean band width and the share from harmonisation, for fitting only
+        and for fitting plus harmonisation.
+    """
     fitting = propagate(model, value, 0.0, draws=draws)
     both = propagate(model, value, value_sd, draws=draws)
     width_fitting = (fitting["upper"] - fitting["lower"]).mean()
@@ -606,7 +919,21 @@ CATCHMENT_AREA_M2 = 5.746e9
 
 def monthly_flow(monthly_mm: pd.Series,
                  area_m2: float = CATCHMENT_AREA_M2) -> pd.Series:
-    """Catchment-mean runoff in mm per month, as a mean flow in m3/s."""
+    """
+    Catchment-mean runoff in mm per month, as a mean flow in m3/s.
+
+    Parameters
+    ----------
+    monthly_mm : pandas.Series
+        Catchment-mean runoff in mm, one value per month, indexed by date.
+    area_m2 : float, optional
+        Catchment area in square metres.
+
+    Returns
+    -------
+    pandas.Series
+        Mean flow in m3/s for each month.
+    """
     days = monthly_mm.index.days_in_month.to_numpy(dtype=float)
     return pd.Series(monthly_mm.to_numpy(dtype=float) / 1000.0 * area_m2
                      / (days * 86400.0), index=monthly_mm.index)
@@ -615,7 +942,8 @@ def monthly_flow(monthly_mm: pd.Series,
 def runoff_as_discharge(monthly_mm: pd.Series, discharge: pd.Series,
                         step_days: int = 7, lag_steps: int = 1,
                         area_m2: float = CATCHMENT_AREA_M2) -> pd.DataFrame:
-    """Apply the naive baseline: every millimetre of runoff reaches the gauge.
+    """
+    Apply the naive baseline: every millimetre of runoff reaches the gauge.
 
     No fitting, no gauge record used — each step simply takes the flow of the
     month it falls in. This is what the use case is worth measuring against,
@@ -623,6 +951,24 @@ def runoff_as_discharge(monthly_mm: pd.Series, discharge: pd.Series,
 
     Returns the same observed/predicted frame as `leave_one_year_out`, so
     `profile_skill` reads it unchanged.
+
+    Parameters
+    ----------
+    monthly_mm : pandas.Series
+        Catchment-mean runoff in mm, one value per month, indexed by date.
+    discharge : pandas.Series
+        Daily gauge discharge, indexed by date.
+    step_days : int, optional
+        Length of each step in days.
+    lag_steps : int, optional
+        Steps to shift the runoff later by, for travel time to the gauge.
+    area_m2 : float, optional
+        Catchment area in square metres.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Years by step, with an ``observed`` and a ``predicted`` column group.
     """
     flow = monthly_flow(monthly_mm, area_m2)
     observed = step_matrix(discharge, step_days)
@@ -653,7 +999,18 @@ def _doy(year: int, month: int) -> float:
 
 
 def collapsed(frame: pd.DataFrame, summary: str, decimals: int = 2) -> None:
-    """Show a table behind a click, so detail is available but not in the way."""
+    """
+    Show a table behind a click, so detail is available but not in the way.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        The table to show.
+    summary : str
+        Text on the line that is clicked to open it.
+    decimals : int, optional
+        Decimal places to round to.
+    """
     from IPython.display import HTML, display
 
     display(HTML(f"<details><summary style='cursor:pointer'>{summary}</summary>"
@@ -695,11 +1052,23 @@ def load_mesh(vertices_file: str | Path = MESH_VERTICES_FILE,
 
 
 def load_basin(source: str | Path = BASIN_FILE) -> list[np.ndarray]:
-    """Read the catchment outline, as rings of (x, y), the exterior first.
+    """
+    Read the catchment outline, as rings of (x, y), the exterior first.
 
     Written out from the project's `SurfaceBasin.shp` (EPSG:3413, the Watson
     polygon) so that drawing the boundary, or asking which mesh nodes fall
     inside it, needs no GIS library here.
+
+    Parameters
+    ----------
+    source : str or pathlib.Path, optional
+        CSV with ``ring``, ``x`` and ``y`` columns. The packaged outline by
+        default.
+
+    Returns
+    -------
+    list of numpy.ndarray
+        One (n, 2) array per ring, the exterior first.
     """
     frame = pd.read_csv(source)
     return [frame.loc[frame["ring"] == n, ["x", "y"]].to_numpy(dtype=float)
@@ -707,12 +1076,25 @@ def load_basin(source: str | Path = BASIN_FILE) -> list[np.ndarray]:
 
 
 def basin_nodes(vertices: np.ndarray, rings: list[np.ndarray]) -> np.ndarray:
-    """Which mesh nodes fall inside the catchment.
+    """
+    Which mesh nodes fall inside the catchment.
 
     The SPDE mesh reaches well beyond the catchment on purpose: a fit run to
     the edge of its own domain is distorted there, so the mesh is given a
     margin. Those outer nodes belong to the fit. They do not belong to a mean
     described as a catchment mean, which is what this mask is for.
+
+    Parameters
+    ----------
+    vertices : numpy.ndarray
+        Node coordinates, with x and y in the first two columns.
+    rings : list of numpy.ndarray
+        The outline, as `load_basin` returns it.
+
+    Returns
+    -------
+    numpy.ndarray
+        True for each node inside the catchment.
     """
     from matplotlib.path import Path as MplPath
 
@@ -724,7 +1106,21 @@ def basin_nodes(vertices: np.ndarray, rings: list[np.ndarray]) -> np.ndarray:
 
 
 def basin_path(rings: list[np.ndarray], scale: float = 1.0) -> "object":
-    """Join the outline rings into one matplotlib path, holes included."""
+    """
+    Join the outline rings into one matplotlib path, holes included.
+
+    Parameters
+    ----------
+    rings : list of numpy.ndarray
+        The outline, as `load_basin` returns it.
+    scale : float, optional
+        Factor applied to every coordinate.
+
+    Returns
+    -------
+    matplotlib.path.Path
+        The outline as one path.
+    """
     from matplotlib.path import Path as MplPath
 
     return MplPath.make_compound_path(
@@ -735,7 +1131,8 @@ def basin_path(rings: list[np.ndarray], scale: float = 1.0) -> "object":
 def mesh_edges(ax: "object", vertices: np.ndarray, triangles: np.ndarray,
                rings: list[np.ndarray] | None = None, colour: str = "white",
                alpha: float = 0.55) -> "object":
-    """Draw a mesh's triangulation over whatever is already on the axes.
+    """
+    Draw a mesh's triangulation over whatever is already on the axes.
 
     `mesh_map` draws a field and can draw the triangulation with it, but only
     where the field sits on the mesh itself. A field returned by the deployed
@@ -744,6 +1141,27 @@ def mesh_edges(ax: "object", vertices: np.ndarray, triangles: np.ndarray,
     interpolation between its nodes rather than measurement.
 
     Coordinates are divided by a thousand, to match `mesh_map`.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on.
+    vertices : numpy.ndarray
+        Node coordinates in metres, with x and y in the first two columns.
+    triangles : numpy.ndarray
+        Triangles as node index triples.
+    rings : list of numpy.ndarray, optional
+        The outline to clip to, as `load_basin` returns it. No clipping by
+        default.
+    colour : str, optional
+        Colour of the edges.
+    alpha : float, optional
+        Opacity of the edges.
+
+    Returns
+    -------
+    list of matplotlib.lines.Line2D
+        The drawn edges.
     """
     import matplotlib.tri as mtri
     from matplotlib.patches import PathPatch
@@ -766,7 +1184,8 @@ def mesh_map(ax: "object", vertices: np.ndarray, values: np.ndarray,
              edges: bool = False, edge_colour: str = "white",
              edge_alpha: float = 0.55, outline: str = "#55606e",
              margin_km: float = 4.0) -> "object":
-    """Draw a fitted field over the mesh, clipped to the catchment.
+    """
+    Draw a fitted field over the mesh, clipped to the catchment.
 
     The field is continuous and the mesh nodes are only where it is evaluated,
     so it is drawn as a surface rather than as points. Clipping to the outline
@@ -783,6 +1202,37 @@ def mesh_map(ax: "object", vertices: np.ndarray, values: np.ndarray,
     mostly pale one.
 
     Coordinates are divided by a thousand, so the axes are in kilometres.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on.
+    vertices : numpy.ndarray
+        Node coordinates in metres, with x and y in the first two columns.
+    values : numpy.ndarray
+        The field's value at each node.
+    rings : list of numpy.ndarray, optional
+        The outline to clip to, as `load_basin` returns it. No clipping by
+        default.
+    triangles : numpy.ndarray, optional
+        Triangles as node index triples.
+    cmap : str or matplotlib.colors.Colormap, optional
+        Colour map for the field.
+    edges : bool, optional
+        Whether to draw the triangulation over the field.
+    edge_colour : str, optional
+        Colour of the edges.
+    edge_alpha : float, optional
+        Opacity of the edges.
+    outline : str, optional
+        Colour of the catchment outline.
+    margin_km : float, optional
+        Space left around the outline, in kilometres.
+
+    Returns
+    -------
+    matplotlib.collections.Collection
+        The drawn surface, for a colour bar.
     """
     import matplotlib.tri as mtri
     from matplotlib.patches import PathPatch
@@ -812,12 +1262,20 @@ def mesh_map(ax: "object", vertices: np.ndarray, values: np.ndarray,
 
 
 def month_axis(ax: "object", months: tuple = MELT_MONTHS) -> None:
-    """Label an axis measured in days of the year with month names instead.
+    """
+    Label an axis measured in days of the year with month names instead.
 
     A melt season is read in months rather than in the 121st to the 266th day
     of the year, and the day a step happens to start on means nothing to a
     reader. The ticks sit on the first of each month, so the space between two
     of them is the month itself.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes whose x axis is in days of the year.
+    months : tuple of int, optional
+        The months to label.
     """
     stamps = [pd.Timestamp(2015, month, 1) for month in (*months, months[-1] + 1)]
     ax.set_xticks([stamp.dayofyear for stamp in stamps])
@@ -826,18 +1284,41 @@ def month_axis(ax: "object", months: tuple = MELT_MONTHS) -> None:
 
 
 def headroom(ax: "object", fraction: float = 0.22) -> None:
-    """Leave space above the data, so a legend at the top does not sit on it."""
+    """
+    Leave space above the data, so a legend at the top does not sit on it.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to adjust.
+    fraction : float, optional
+        Space to add, as a fraction of the current y range.
+    """
     bottom, top = ax.get_ylim()
     ax.set_ylim(bottom, bottom + (top - bottom) * (1.0 + fraction))
 
 
 def label_points(ax: "object", x: object, y: object, labels: object,
                  fontsize: int = 8, colour: str = "#666666") -> None:
-    """Name every point, nudged so that the names do not land on each other.
+    """
+    Name every point, nudged so that the names do not land on each other.
 
     Each label is tried in a few positions around its point and keeps the
     first that is clear of the labels already placed. Where a cluster leaves
     nowhere free, the last position is kept rather than the label dropped.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes the points are drawn on.
+    x, y : array-like
+        Coordinates of the points.
+    labels : iterable
+        One label per point.
+    fontsize : int, optional
+        Size of the labels.
+    colour : str, optional
+        Colour of the labels.
     """
     figure = ax.figure
     figure.canvas.draw()
@@ -868,7 +1349,25 @@ def label_points(ax: "object", x: object, y: object, labels: object,
 # --------------------------------------------------------------------------
 
 def season_shape(flow: pd.Series, year: int, step_days: int, lag: int) -> np.ndarray:
-    """One season's runoff curve, sampled at the middle of each step."""
+    """
+    One season's runoff curve, sampled at the middle of each step.
+
+    Parameters
+    ----------
+    flow : pandas.Series
+        Mean flow in m3/s for each month, as `monthly_flow` returns.
+    year : int
+        The season.
+    step_days : int
+        Length of each step in days.
+    lag : int
+        Steps to shift the curve later by.
+
+    Returns
+    -------
+    numpy.ndarray
+        Flow for each step. NaN throughout if the season has no data.
+    """
     starts = _step_starts(step_days)
     middle = starts + step_days // 2
     season = flow[flow.index.year == year]
@@ -887,7 +1386,27 @@ def season_shape(flow: pd.Series, year: int, step_days: int, lag: int) -> np.nda
 
 def shape_matrix(monthly_mm: pd.Series, years: Years, step_days: int = 7, lag: int = 0,
                  area_m2: float = CATCHMENT_AREA_M2) -> pd.DataFrame:
-    """Runoff curves for several seasons, rows years and columns day-of-year."""
+    """
+    Runoff curves for several seasons, rows years and columns day-of-year.
+
+    Parameters
+    ----------
+    monthly_mm : pandas.Series
+        Catchment-mean runoff in mm, one value per month, indexed by date.
+    years : sequence of int
+        The seasons.
+    step_days : int, optional
+        Length of each step in days.
+    lag : int, optional
+        Steps to shift each curve later by.
+    area_m2 : float, optional
+        Catchment area in square metres.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Flow in m3/s, years by step.
+    """
     flow = monthly_flow(monthly_mm, area_m2)
     starts = _step_starts(step_days)
     return pd.DataFrame({int(y): season_shape(flow, int(y), step_days, lag)
@@ -923,11 +1442,32 @@ class ShapeModel:
             lags: tuple[int, ...] = (0, 1, 2, 3),
             extras: pd.DataFrame | None = None,
             area_m2: float = CATCHMENT_AREA_M2) -> "ShapeModel":
-        """Fit the curve, and optionally extra per-season predictors.
+        """
+        Fit the curve, and optionally extra per-season predictors.
 
         `extras` is one value per season per predictor - a lake-intensity
         coefficient, say - held constant across the steps of that season. The
         curve carries the within-season shape, the extras shift the level.
+
+        Parameters
+        ----------
+        discharge : pandas.Series
+            Daily gauge discharge, indexed by date.
+        monthly_mm : pandas.Series
+            Catchment-mean runoff in mm, one value per month, indexed by date.
+        step_days : int, optional
+            Length of each step in days.
+        lags : tuple of int, optional
+            Lags to try, in steps. The one with the lowest error is kept.
+        extras : pandas.DataFrame, optional
+            Extra predictors, one row per season, indexed by year.
+        area_m2 : float, optional
+            Catchment area in square metres.
+
+        Returns
+        -------
+        ShapeModel
+            The fitted model.
         """
         observed = step_matrix(discharge, step_days)
         flow = monthly_flow(monthly_mm, area_m2)
@@ -987,7 +1527,19 @@ class ShapeModel:
 
     # ------------------------------------------------------------ predict --
     def shape(self, year: int) -> np.ndarray:
-        """Give the runoff curve this model would use for a season."""
+        """
+        Give the runoff curve this model would use for a season.
+
+        Parameters
+        ----------
+        year : int
+            The season.
+
+        Returns
+        -------
+        numpy.ndarray
+            Flow in m3/s for each step.
+        """
         flow = monthly_flow(self.monthly, self.area_m2)
         return season_shape(flow, int(year), self.step_days, self.lag)
 
@@ -1006,13 +1558,27 @@ class ShapeModel:
 
     def profile(self, values: Values,
                 extras: pd.DataFrame | np.ndarray | None = None) -> pd.Series:
-        """Discharge through one melt season, m3/s. Takes a year or a curve.
+        """
+        Discharge through one melt season, m3/s. Takes a year or a curve.
 
         An `extras` row given here is used as it stands, which is what a
         held-out season needs: its own extra predictors are known, but the
         model was fitted without them, so looking the year up would silently
         fall back to the training mean and the prediction would not depend on
         them at all.
+
+        Parameters
+        ----------
+        values : int or array-like
+            A year, whose runoff curve is looked up, or a curve.
+        extras : pandas.DataFrame or numpy.ndarray, optional
+            The season's extra predictor values.
+
+        Returns
+        -------
+        pandas.Series
+            Discharge in m3/s for each step, indexed by the day of year the step
+            starts. Never negative.
         """
         curve = self._as_shape(values)
         if extras is not None:
@@ -1027,16 +1593,39 @@ class ShapeModel:
             index=self.starts, name="m3s")
 
     def profiles(self, years: Years) -> pd.DataFrame:
-        """One profile per season: rows are years, columns day-of-year."""
+        """
+        One profile per season: rows are years, columns day-of-year.
+
+        Parameters
+        ----------
+        years : sequence of int
+            The seasons, or anything whose index holds them.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Discharge in m3/s, years by step.
+        """
         index = getattr(years, "index", years)
         return pd.DataFrame({int(y): self.profile(int(y)) for y in index}).T
 
     def prediction_se(self, values: Values) -> np.ndarray:
-        """Give the standard error of a new observation, per step.
+        """
+        Give the standard error of a new observation, per step.
 
         Simple-regression prediction error: the residual scatter, widened by
         the uncertainty of the fitted line and by how far the runoff value sits
         from the mean of the values it was fitted on.
+
+        Parameters
+        ----------
+        values : int or array-like
+            A year, or a curve.
+
+        Returns
+        -------
+        numpy.ndarray
+            The standard error for each step, in m3/s.
         """
         curve = self._as_shape(values)
         offset = self._offset(int(values)) if np.isscalar(values) else 0.0
@@ -1047,7 +1636,20 @@ class ShapeModel:
         return local_sd * np.sqrt(1.0 + np.clip(leverage, 0.0, None))
 
     def leverage(self, values: Values) -> float:
-        """Say how wide this season's band is against a typical one."""
+        """
+        Say how wide this season's band is against a typical one.
+
+        Parameters
+        ----------
+        values : int or array-like
+            A year, or a curve.
+
+        Returns
+        -------
+        float
+            The ratio of this season's mean standard error to the average over the
+            fitted seasons.
+        """
         here = float(np.nanmean(self.prediction_se(values)))
         centre = float(np.nanmean(
             [np.nanmean(self.prediction_se(int(y))) for y in self.years]))
@@ -1057,7 +1659,21 @@ class ShapeModel:
         return _t_quantile(0.5 + level / 2.0, self.dof)
 
     def band(self, values: Values, level: float = 0.68) -> pd.DataFrame:
-        """Prediction interval around one season, at one coverage."""
+        """
+        Prediction interval around one season, at one coverage.
+
+        Parameters
+        ----------
+        values : int or array-like
+            A year, or a curve.
+        level : float, optional
+            Coverage of the interval.
+
+        Returns
+        -------
+        pandas.DataFrame
+            ``predicted``, ``lower`` and ``upper`` for each step, in m3/s.
+        """
         centre = self.profile(values)
         spread = pd.Series(self.prediction_se(values) * self._multiplier(level),
                            index=self.starts)
@@ -1067,7 +1683,22 @@ class ShapeModel:
 
     def bands(self, values: Values,
               levels: Sequence[float] = (0.68, 0.95)) -> pd.DataFrame:
-        """Several coverages at once: columns lower_68, upper_68, lower_95, ..."""
+        """
+        Several coverages at once: columns lower_68, upper_68, lower_95, ...
+
+        Parameters
+        ----------
+        values : int or array-like
+            A year, or a curve.
+        levels : sequence of float, optional
+            The coverages to compute.
+
+        Returns
+        -------
+        pandas.DataFrame
+            ``predicted``, plus ``lower_<percent>`` and ``upper_<percent>`` for each
+            level, for each step.
+        """
         out = pd.DataFrame({"predicted": self.profile(values)})
         for level in levels:
             band = self.band(values, level=level)
@@ -1089,7 +1720,8 @@ def shape_leave_one_year_out(discharge: pd.Series, monthly_mm: pd.Series,
                              step_days: int = 7, extras: pd.DataFrame | None = None,
                              lags: tuple = (0, 1, 2, 3),
                              area_m2: float = CATCHMENT_AREA_M2) -> pd.DataFrame:
-    """Predict each season from a shape model that never saw that season.
+    """
+    Predict each season from a shape model that never saw that season.
 
     The companion to `leave_one_year_out` for `ShapeModel`. The lag and the
     line are both chosen inside each fold, and any extra per-season predictor
@@ -1097,6 +1729,26 @@ def shape_leave_one_year_out(discharge: pd.Series, monthly_mm: pd.Series,
     that predicts it.
 
     Returns the same observed/predicted frame the other models return.
+
+    Parameters
+    ----------
+    discharge : pandas.Series
+        Daily gauge discharge, indexed by date.
+    monthly_mm : pandas.Series
+        Catchment-mean runoff in mm, one value per month, indexed by date.
+    step_days : int, optional
+        Length of each step in days.
+    extras : pandas.DataFrame, optional
+        Extra predictors, one row per season, indexed by year.
+    lags : tuple of int, optional
+        Lags to try, in steps.
+    area_m2 : float, optional
+        Catchment area in square metres.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Years by step, with an ``observed`` and a ``predicted`` column group.
     """
     observed = step_matrix(discharge, step_days)
     flow_years = set(monthly_mm.index.year)
