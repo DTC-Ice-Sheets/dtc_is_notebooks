@@ -30,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from matplotlib.path import Path as MplPath
 from scipy.stats import t as student_t
 
 logger = logging.getLogger(__name__)
@@ -897,7 +898,7 @@ def monthly_flow(monthly_mm: pd.Series,
     """
     days = monthly_mm.index.days_in_month.to_numpy(dtype=float)
     return pd.Series(monthly_mm.to_numpy(dtype=float) / 1000.0 * area_m2
-                     / (days * 86400.0), index=monthly_mm.index)
+                     / (days * SECONDS_PER_DAY), index=monthly_mm.index)
 
 
 def runoff_as_discharge(monthly_mm: pd.Series, discharge: pd.Series,
@@ -1038,8 +1039,6 @@ def basin_nodes(vertices: np.ndarray, rings: list[np.ndarray]) -> np.ndarray:
     numpy.ndarray
         True for each node inside the catchment.
     """
-    from matplotlib.path import Path as MplPath
-
     xy = np.asarray(vertices, dtype=float)[:, :2]
     inside = MplPath(rings[0]).contains_points(xy)
     for hole in rings[1:]:
