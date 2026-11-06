@@ -30,7 +30,7 @@ CONTEXT_PAD_W = 8  # columns, left and right
 
 REF_COLOR = "#0072b2"  # RACMO
 EMU_COLOR = "#d55e00"  # emulator
-SMB_CMAP = "coolwarm"  # blue = net accumulation, red = net loss (same as the dashboard)
+SMB_CMAP = "RdBu"  # blue = net accumulation, red = net loss (same as the dashboard)
 
 # all the ERA5 channels are standardised per tile
 ERA5_UNITS = {"d2m": "K", "msl": "Pa","sp": "Pa",  "sst": "K", "t2m": "K", "tp": "m", "u10": "m/s", "v10": "m/s"}
@@ -223,6 +223,17 @@ def era5_label(channel: str) -> str:
         The axis label.
     """
     return f"ERA5 {channel} [{ERA5_UNITS.get(channel, '?')}]  (raw input)"
+
+
+def _validate_selected_month(out_ds: xr.Dataset, selected_date: datetime) -> None:
+    dataset_months = pd.DatetimeIndex(out_ds["time"].values).to_period("M")
+    requested_month = pd.Period(selected_date, "M")
+
+    if requested_month not in dataset_months:
+        raise ValueError(
+            f"Date {selected_date} is not in the dataset. "
+            f"Available months: {sorted(set(dataset_months.astype(str)))}"
+        )
 
 
 # ============================================================================
@@ -430,15 +441,13 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
         The generated figure.
     """
     # check if the date within the dataset range
-    date_min = out_ds.isel(time=0).time.values
-    date_max = out_ds.isel(time=-1).time.values
-    if not (date_min <= np.datetime64(selected_date, "M") <= date_max):
-        raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
+    _validate_selected_month(out_ds, selected_date)
 
     # select the nearest date in the dataset to the provided date
     era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=np.datetime64(selected_date, "M"), method="nearest").values
-    predictions = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest").values
-    target = reference_on_prediction_time(out_ds).sel(time_r=predictions.time).values
+    predictions_da = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest")
+    target = reference_on_prediction_time(out_ds).sel(time=predictions_da.time).values
+    predictions = predictions_da.values
 
     if not np.isfinite(target).any():
         print("No RACMO reference is available for the selected prediction month.") # noqa: T201
@@ -462,7 +471,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     im1 = ax[1].pcolormesh(out_ds.x.values,
                             out_ds.y.values,
                             np.squeeze(target),
-                            cmap=SMB_CMAP,
+                            cmap="coolwarm",
                             transform=POLAR,
                             vmin=vmin, vmax=vmax)
     ax[1].set_title("RACMO reference \n[kg m-2]", fontsize=14)
@@ -474,7 +483,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     im2 = ax[2].pcolormesh(out_ds.x.values,
                         out_ds.y.values,
                         predictions,
-                        cmap=SMB_CMAP,
+                        cmap="coolwarm",
                         transform=POLAR,
                         vmin=vmin, vmax=vmax)
     ax[2].set_title("Predicted SMB \n[kg m-2]", fontsize=14)
@@ -551,14 +560,11 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
         The function generates and displays the plots for the specified date.
     """
     # check if the date within the dataset range
-    date_min = out_ds.isel(time=0).time.values
-    date_max = out_ds.isel(time=-1).time.values
-    if not (date_min <= np.datetime64(selected_date, "M") <= date_max):
-        raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
+    _validate_selected_month(out_ds, selected_date)
 
-    prediction = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest")
-    predictions = prediction.values
-    target = reference_on_prediction_time(out_ds).sel(time=prediction.time).values
+    predictions_da = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest")
+    predictions = predictions_da.values
+    target = reference_on_prediction_time(out_ds).sel(time=predictions_da.time).values
     if not np.isfinite(target).any():
         raise ValueError("No RACMO reference is available for the selected prediction month.")
 
