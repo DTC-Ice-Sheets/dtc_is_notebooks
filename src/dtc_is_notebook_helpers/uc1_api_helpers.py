@@ -159,8 +159,7 @@ async def run_grf_job(api_client: ApiClient, dataset_name: str, start_date: str 
 
 
 async def run_fts_job(api_client: ApiClient, data_path: str, curve_time_points: int = 5, num_pca: int = 2,
-                      num_factors: int = 3, forecast_horizon: int = 3,
-                      progress: Progress = print) -> str:
+                      num_factors: int = 3, progress: Progress = print) -> str:
     """
     Run the FTS module over a harmonised field through the Query API.
 
@@ -174,8 +173,6 @@ async def run_fts_job(api_client: ApiClient, data_path: str, curve_time_points: 
         Timesteps treated as one curve. Five, one per melt-season month.
     num_pca, num_factors : int, optional
         Components and factors retained by the two reduction stages.
-    forecast_horizon : int, optional
-        Number of curves to forecast ahead.
     progress : callable, optional
         Called with a line of progress. `print` by default.
 
@@ -190,7 +187,6 @@ async def run_fts_job(api_client: ApiClient, data_path: str, curve_time_points: 
         curve_time_points=curve_time_points,
         num_pca=num_pca,
         num_factors=num_factors,
-        forecast_horizon=forecast_horizon,
     )
     progress("FTS: submitting ...")
     submitted = await api.submit_fts_job(request)
@@ -388,8 +384,7 @@ async def grf_fields(api_client: ApiClient, dataset_name: str, start_date: str =
 
 
 async def fts_coefficients(api_client: ApiClient, data_path: str, curve_time_points: int = 5, num_pca: int = 2,
-                           num_factors: int = 3, forecast_horizon: int = 3,
-                           progress: Progress = print) -> dict:
+                           num_factors: int = 3, progress: Progress = print) -> dict:
     """
     Run an FTS job and read its coefficients back as one row per curve.
 
@@ -404,7 +399,7 @@ async def fts_coefficients(api_client: ApiClient, data_path: str, curve_time_poi
         An authenticated client.
     data_path : str
         Output of a GRF job.
-    curve_time_points, num_pca, num_factors, forecast_horizon : int, optional
+    curve_time_points, num_pca, num_factors : int, optional
         Passed to the module. See :func:`run_fts_job`.
     progress : callable, optional
         Called with a line of progress.
@@ -422,7 +417,7 @@ async def fts_coefficients(api_client: ApiClient, data_path: str, curve_time_poi
         message names what it does hold.
     """
     path = await run_fts_job(api_client, data_path, curve_time_points, num_pca,
-                             num_factors, forecast_horizon, progress=progress)
+                             num_factors, progress=progress)
     progress("FTS: reading the coefficients back")
     ds = open_store(path)
 
