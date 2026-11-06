@@ -9,19 +9,20 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from dtc_query_client.api_client import ApiClient
 
 from dtc_is_notebook_helpers import uc1_api_helpers as api
 
 
 @pytest.fixture
-def token(monkeypatch):
-    """Put a token in the environment, as a caller is expected to."""
-    monkeypatch.setenv(api.TOKEN_VARIABLE, "not-a-real-token")
+def mock_api_client():
+    return MagicMock(spec=ApiClient)
 
 
 def _grf_store(path, variable: str = "log10_surface_runoff_amount") -> str:
@@ -71,24 +72,53 @@ def _fts_store(path, names: tuple[str, ...]) -> str:
 
 
 # --------------------------------------------------------------------------
-# Configuration
+# Submitting a job
 # --------------------------------------------------------------------------
 
-def test_a_missing_token_says_where_to_get_one(monkeypatch):
-    monkeypatch.delenv(api.TOKEN_VARIABLE, raising=False)
-    with pytest.raises(RuntimeError, match="auth/get-token"):
-        api._configuration()
+@pytest.mark.parametrize(
+    ("submit", "api_class", "method", "output_key"),
+    [
+        (lambda c: api.run_grf_job(c, "UC1_WATSON_RUNOFF_INPUT_MAR", progress=lambda _: None),
+         "HydropowerApi", "submit_grf_job", api.GRF_OUTPUT_KEY),
+        (lambda c: api.run_fts_job(c, "grf.zarr", progress=lambda _: None),
+         "HydropowerApi", "submit_fts_job", api.FTS_OUTPUT_KEY),
+        (lambda c: api.download_dataset(c, "UC1_WATSON_DISCHARGE_GAUGE", progress=lambda _: None),
+         "GenericApi", "download_data", api.DOWNLOAD_OUTPUT_KEY),
+    ],
+    ids=["grf", "fts", "download"],
+)
+def test_run_job_submits_and_waits_through_the_given_client(monkeypatch, mock_api_client, submit, api_class,
+                                                             method, output_key):
+    seen = {}
 
+    class FakeApi:
+        def __init__(self, api_client):
+            seen["constructed_with"] = api_client
 
-def test_a_token_in_the_environment_is_used(token):  # noqa: ARG001
-    assert api._configuration().access_token == "not-a-real-token"  # noqa: S105
+        async def _submit(self, request):
+            seen["request"] = request
+            return SimpleNamespace(job_id="job-1")
+
+    setattr(FakeApi, method, FakeApi._submit)
+
+    async def fake_await(api_client, job_id, key, what):     # noqa: ARG001
+        seen["awaited_with"], seen["job_id"], seen["key"] = api_client, job_id, key
+        return "out.zarr"
+
+    monkeypatch.setattr(api.dtc_query_client.api, api_class, FakeApi)
+    monkeypatch.setattr(api, "_await_job", fake_await)
+
+    assert asyncio.run(submit(mock_api_client)) == "out.zarr"
+    assert seen["constructed_with"] is mock_api_client
+    assert seen["awaited_with"] is mock_api_client
+    assert (seen["job_id"], seen["key"]) == ("job-1", output_key)
 
 
 # --------------------------------------------------------------------------
 # Waiting on a job
 # --------------------------------------------------------------------------
 
-def test_a_succeeded_job_gives_back_its_output_path(monkeypatch):
+def test_a_succeeded_job_gives_back_its_output_path(monkeypatch, mock_api_client):
     finished = SimpleNamespace(
         status=api.JobStatus.SUCCEEDED,
         outputs={"grf-module": {"output_path": "somewhere.zarr"}})
@@ -97,11 +127,11 @@ def test_a_succeeded_job_gives_back_its_output_path(monkeypatch):
         return finished
 
     monkeypatch.setattr(api, "wait_for_job", fake_wait)
-    path = asyncio.run(api._await_job(None, "job-1", "grf-module", "GRF"))
+    path = asyncio.run(api._await_job(mock_api_client, "job-1", "grf-module", "GRF"))
     assert path == "somewhere.zarr"
 
 
-def test_a_job_that_did_not_succeed_is_raised_not_returned(monkeypatch):
+def test_a_job_that_did_not_succeed_is_raised_not_returned(monkeypatch, mock_api_client):
     finished = SimpleNamespace(status="FAILED", outputs={})
 
     async def fake_wait(client, job_id, **kwargs):      # noqa: ANN001, ARG001, ANN003
@@ -109,21 +139,21 @@ def test_a_job_that_did_not_succeed_is_raised_not_returned(monkeypatch):
 
     monkeypatch.setattr(api, "wait_for_job", fake_wait)
     with pytest.raises(api.JobFailedError, match="FAILED"):
-        asyncio.run(api._await_job(None, "job-1", "grf-module", "GRF"))
+        asyncio.run(api._await_job(mock_api_client, "job-1", "grf-module", "GRF"))
 
 
 # --------------------------------------------------------------------------
 # Reading a finished GRF job back
 # --------------------------------------------------------------------------
 
-def test_a_finished_job_is_read_back_as_a_table_and_its_cell_positions(tmp_path, monkeypatch):
+def test_a_finished_job_is_read_back_as_a_table_and_its_cell_positions(tmp_path, monkeypatch, mock_api_client):
     store = _grf_store(tmp_path)
 
     async def fake_run(*args, **kwargs):                # noqa: ANN002, ANN003, ARG001
         return store
 
     monkeypatch.setattr(api, "run_grf_job", fake_run)
-    result = asyncio.run(api.grf_fields("UC1_WATSON_RUNOFF_INPUT_MAR",
+    result = asyncio.run(api.grf_fields(mock_api_client, "UC1_WATSON_RUNOFF_INPUT_MAR",
                                         progress=lambda _: None))
 
     assert result["variable"] == "log10_surface_runoff_amount"
@@ -134,7 +164,7 @@ def test_a_finished_job_is_read_back_as_a_table_and_its_cell_positions(tmp_path,
                                             pd.Timestamp("2019-07-15")]
 
 
-def test_the_cell_positions_line_up_with_the_columns(tmp_path, monkeypatch):
+def test_the_cell_positions_line_up_with_the_columns(tmp_path, monkeypatch, mock_api_client):
     # Columns are stacked x-major, so the first three cells share the first x.
     store = _grf_store(tmp_path)
 
@@ -142,7 +172,7 @@ def test_the_cell_positions_line_up_with_the_columns(tmp_path, monkeypatch):
         return store
 
     monkeypatch.setattr(api, "run_grf_job", fake_run)
-    points = asyncio.run(api.grf_fields("UC1_WATSON_RUNOFF_INPUT_MAR",
+    points = asyncio.run(api.grf_fields(mock_api_client, "UC1_WATSON_RUNOFF_INPUT_MAR",
                                         progress=lambda _: None))["points"]
 
     np.testing.assert_allclose(points[:3, 0], [0.0, 0.0, 0.0])
@@ -150,14 +180,14 @@ def test_the_cell_positions_line_up_with_the_columns(tmp_path, monkeypatch):
     np.testing.assert_allclose(points[3:, 0], [1000.0, 1000.0, 1000.0])
 
 
-def test_a_log10_variable_is_returned_on_its_linear_scale(tmp_path, monkeypatch):
+def test_a_log10_variable_is_returned_on_its_linear_scale(tmp_path, monkeypatch, mock_api_client):
     store = _grf_store(tmp_path)
 
     async def fake_run(*args, **kwargs):                # noqa: ANN002, ANN003, ARG001
         return store
 
     monkeypatch.setattr(api, "run_grf_job", fake_run)
-    result = asyncio.run(api.grf_fields("UC1_WATSON_RUNOFF_INPUT_MAR",
+    result = asyncio.run(api.grf_fields(mock_api_client, "UC1_WATSON_RUNOFF_INPUT_MAR",
                                         progress=lambda _: None))
 
     # The store holds 0..11 as log10, so the first cell comes back as 10**0.
@@ -166,20 +196,20 @@ def test_a_log10_variable_is_returned_on_its_linear_scale(tmp_path, monkeypatch)
     np.testing.assert_allclose(result["uncertainty"].to_numpy()[0, 0], 0.0)
 
 
-def test_a_variable_that_is_not_a_log_is_left_alone(tmp_path, monkeypatch):
+def test_a_variable_that_is_not_a_log_is_left_alone(tmp_path, monkeypatch, mock_api_client):
     store = _grf_store(tmp_path, variable="surface_runoff_amount")
 
     async def fake_run(*args, **kwargs):                # noqa: ANN002, ANN003, ARG001
         return store
 
     monkeypatch.setattr(api, "run_grf_job", fake_run)
-    result = asyncio.run(api.grf_fields("UC1_WATSON_RUNOFF_INPUT_MAR",
+    result = asyncio.run(api.grf_fields(mock_api_client, "UC1_WATSON_RUNOFF_INPUT_MAR",
                                         progress=lambda _: None))
 
     np.testing.assert_allclose(result["fields"].to_numpy()[0, :3], [0.0, 1.0, 2.0])
 
 
-def test_an_output_with_no_gridded_field_is_refused(tmp_path, monkeypatch):
+def test_an_output_with_no_gridded_field_is_refused(tmp_path, monkeypatch, mock_api_client):
     times = pd.to_datetime(["2019-06-15"])
     ds = xr.Dataset(data_vars={"something": (("time",), np.array([1.0]))},
                     coords={"time": times})
@@ -191,7 +221,7 @@ def test_an_output_with_no_gridded_field_is_refused(tmp_path, monkeypatch):
 
     monkeypatch.setattr(api, "run_grf_job", fake_run)
     with pytest.raises(ValueError, match="no gridded field"):
-        asyncio.run(api.grf_fields("UC1_WATSON_RUNOFF_INPUT_MAR",
+        asyncio.run(api.grf_fields(mock_api_client, "UC1_WATSON_RUNOFF_INPUT_MAR",
                                    progress=lambda _: None))
 
 
@@ -211,17 +241,17 @@ def test_the_spatial_filter_is_built_in_a_form_the_endpoint_accepts():
     assert wrapped.to_dict() == api.WHOLE_WORLD
 
 
-def test_the_gauge_record_comes_back_as_a_daily_series(tmp_path, monkeypatch):
+def test_the_gauge_record_comes_back_as_a_daily_series(tmp_path, monkeypatch, mock_api_client):
     store = _gauge_store(tmp_path)
     asked = {}
 
-    async def fake_download(dataset_id, *args, **kwargs):   # noqa: ANN001, ANN002, ANN003
+    async def fake_download(api_client, dataset_id, *args, **kwargs):   # noqa: ANN001, ANN002, ANN003, ARG001
         asked["dataset_id"] = dataset_id
         asked["variables"] = kwargs.get("variables")
         return store
 
     monkeypatch.setattr(api, "download_dataset", fake_download)
-    series = asyncio.run(api.discharge_series(progress=lambda _: None))
+    series = asyncio.run(api.discharge_series(mock_api_client, progress=lambda _: None))
 
     assert asked["dataset_id"] == "UC1_WATSON_DISCHARGE_GAUGE"
     assert asked["variables"] == [api.DISCHARGE_VARIABLE]
@@ -230,16 +260,16 @@ def test_the_gauge_record_comes_back_as_a_daily_series(tmp_path, monkeypatch):
     np.testing.assert_allclose(series.to_numpy(), [10.0, 20.0, 30.0, 40.0])
 
 
-def test_the_measured_only_record_is_a_different_variable(tmp_path, monkeypatch):
+def test_the_measured_only_record_is_a_different_variable(tmp_path, monkeypatch, mock_api_client):
     store = _gauge_store(tmp_path)
     asked = {}
 
-    async def fake_download(dataset_id, *args, **kwargs):   # noqa: ANN001, ANN002, ANN003, ARG001
+    async def fake_download(api_client, dataset_id, *args, **kwargs):   # noqa: ANN001, ANN002, ANN003, ARG001
         asked["variables"] = kwargs.get("variables")
         return store
 
     monkeypatch.setattr(api, "download_dataset", fake_download)
-    series = asyncio.run(api.discharge_series(measured_only=True, progress=lambda _: None))
+    series = asyncio.run(api.discharge_series(mock_api_client, measured_only=True, progress=lambda _: None))
 
     assert asked["variables"] == [f"measured_{api.DISCHARGE_VARIABLE}"]
     assert np.isnan(series.to_numpy()[1])            # the gap is kept, not filled
@@ -249,20 +279,20 @@ def test_the_measured_only_record_is_a_different_variable(tmp_path, monkeypatch)
 # Reading a finished FTS job back
 # --------------------------------------------------------------------------
 
-def test_the_coefficients_are_read_as_curves_by_factor(tmp_path, monkeypatch):
+def test_the_coefficients_are_read_as_curves_by_factor(tmp_path, monkeypatch, mock_api_client):
     store = _fts_store(tmp_path, ("log10_surface_runoff_amount",))
 
     async def fake_run(*args, **kwargs):                # noqa: ANN002, ANN003, ARG001
         return store
 
     monkeypatch.setattr(api, "run_fts_job", fake_run)
-    result = asyncio.run(api.fts_coefficients("somewhere.zarr", progress=lambda _: None))
+    result = asyncio.run(api.fts_coefficients(mock_api_client, "somewhere.zarr", progress=lambda _: None))
 
     assert result["coefficients"].shape == (4, 3)
     assert list(result["coefficients"].columns) == ["factor_1", "factor_2", "factor_3"]
 
 
-def test_the_fields_coefficients_are_taken_over_the_uncertainty_ones(tmp_path, monkeypatch):
+def test_the_fields_coefficients_are_taken_over_the_uncertainty_ones(tmp_path, monkeypatch, mock_api_client):
     """
     The module fits every spatial variable, and the GRF output carries the spread too.
 
@@ -276,7 +306,7 @@ def test_the_fields_coefficients_are_taken_over_the_uncertainty_ones(tmp_path, m
         return store
 
     monkeypatch.setattr(api, "run_fts_job", fake_run)
-    result = asyncio.run(api.fts_coefficients("somewhere.zarr", progress=lambda _: None))
+    result = asyncio.run(api.fts_coefficients(mock_api_client, "somewhere.zarr", progress=lambda _: None))
 
     assert "log10_surface_runoff_amount" in result["layout"]
     assert "uncertainty" not in result["layout"]
@@ -284,7 +314,7 @@ def test_the_fields_coefficients_are_taken_over_the_uncertainty_ones(tmp_path, m
     np.testing.assert_allclose(result["coefficients"].to_numpy()[0], [0.0, 1.0, 2.0])
 
 
-def test_an_output_with_nothing_readable_names_what_it_holds(tmp_path, monkeypatch):
+def test_an_output_with_nothing_readable_names_what_it_holds(tmp_path, monkeypatch, mock_api_client):
     ds = xr.Dataset(data_vars={"only_one": (("coef_id",), np.array([1.0, 2.0]))},
                     coords={"coef_id": np.arange(2)})
     store = tmp_path / "odd.zarr"
@@ -295,4 +325,4 @@ def test_an_output_with_nothing_readable_names_what_it_holds(tmp_path, monkeypat
 
     monkeypatch.setattr(api, "run_fts_job", fake_run)
     with pytest.raises(ValueError, match="only_one"):
-        asyncio.run(api.fts_coefficients("somewhere.zarr", progress=lambda _: None))
+        asyncio.run(api.fts_coefficients(mock_api_client, "somewhere.zarr", progress=lambda _: None))

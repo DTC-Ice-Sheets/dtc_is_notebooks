@@ -432,3 +432,14 @@ def test_catchment_mean_keeps_a_missing_value_that_does_carry_weight():
 def test_catchment_mean_refuses_weights_that_are_all_zero():
     with pytest.raises(ValueError, match="nothing to average"):
         uc1.catchment_mean(pd.DataFrame([[1.0, 2.0]]), np.zeros(2))
+
+
+def test_load_basin_and_load_mesh_read_the_packaged_geometry():
+    rings = uc1.load_basin()
+    vertices, triangles = uc1.load_mesh()
+
+    assert len(rings) >= 1
+    assert rings[0].shape[1] == 2
+    assert vertices.shape[1] >= 2
+    assert triangles.shape[1] == 3
+    assert triangles.max() < len(vertices)

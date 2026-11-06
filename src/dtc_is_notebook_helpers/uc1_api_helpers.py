@@ -6,23 +6,22 @@ the data download endpoint, and the fitted fields and curve coefficients, by
 submitting the GRF and FTS modules as jobs. Each call returns the path of the
 output the workflow wrote, which the next step takes as its input.
 
-A token is required. Generate one at
-https://query.dtc-ice-sheets.org/auth/get-token and set it as
-``DTC_IS_AUTH_TOKEN`` in the environment.
+Every call takes an authenticated API client, as the token widget in
+``authentication_widget`` hands one back. The calls are coroutines, so a
+notebook awaits them directly::
 
-The calls are coroutines, so a notebook awaits them directly::
-
-    grf_path = await run_grf_job("UC1_WATSON_RUNOFF_INPUT_RACMO55")
-    fts_path = await run_fts_job(grf_path)
+    client = token_widget.get_client()
+    grf_path = await run_grf_job(client, "UC1_WATSON_RUNOFF_INPUT_RACMO55")
+    fts_path = await run_fts_job(client, grf_path)
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable
 
 import dtc_query_client
+from dtc_query_client.api_client import ApiClient
 from dtc_query_client.helpers import wait_for_job
 from dtc_query_client.models.job_status import JobStatus
 
@@ -30,12 +29,6 @@ logger = logging.getLogger(__name__)
 
 #: A sink for progress lines, so a caller can route them where it likes.
 Progress = Callable[[str], None]
-
-#: Where the deployed Query API lives.
-QUERY_API_HOST = "https://query.dtc-ice-sheets.org"
-
-#: Environment variable holding the caller's API token.
-TOKEN_VARIABLE = "DTC_IS_AUTH_TOKEN"  # noqa: S105
 
 #: How long to keep waiting for a job that has not reported back, in seconds.
 MAX_JOB_MISSING_DELAY = 300
@@ -88,33 +81,7 @@ def open_store(path: str) -> "object":
         return xr.open_zarr(path, consolidated=False)
 
 
-def _configuration() -> dtc_query_client.configuration.Configuration:
-    """
-    Build an API configuration from the token in the environment.
-
-    Returns
-    -------
-    dtc_query_client.configuration.Configuration
-        Configured for the deployed Query API.
-
-    Raises
-    ------
-    RuntimeError
-        If no token is set, since every endpoint requires one.
-    """
-    token = os.environ.get(TOKEN_VARIABLE)
-    if not token:
-        raise RuntimeError(
-            f"{TOKEN_VARIABLE} is not set, so the Query API cannot be reached. "
-            f"Generate a token at {QUERY_API_HOST}/auth/get-token and set it in "
-            "the environment.",
-        )
-    return dtc_query_client.configuration.Configuration(
-        access_token=token, host=QUERY_API_HOST,
-    )
-
-
-async def _await_job(api_client: "object", job_id: str, output_key: str,
+async def _await_job(api_client: ApiClient, job_id: str, output_key: str,
                      what: str) -> str:
     """
     Wait for one submitted job and return the path of what it wrote.
@@ -150,7 +117,7 @@ async def _await_job(api_client: "object", job_id: str, output_key: str,
     return path
 
 
-async def run_grf_job(dataset_name: str, start_date: str = "2006-01-01",
+async def run_grf_job(api_client: ApiClient, dataset_name: str, start_date: str = "2006-01-01",
                       end_date: str = "2026-01-01", grid_res_x: int = 100,
                       grid_res_y: int = 100, progress: Progress = print) -> str:
     """
@@ -158,6 +125,8 @@ async def run_grf_job(dataset_name: str, start_date: str = "2006-01-01",
 
     Parameters
     ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
     dataset_name : str
         A Use Case 1 collection, e.g. ``UC1_WATSON_RUNOFF_INPUT_RACMO55``.
     start_date, end_date : str, optional
@@ -172,25 +141,23 @@ async def run_grf_job(dataset_name: str, start_date: str = "2006-01-01",
     str
         Path of the harmonised field the workflow wrote.
     """
-    configuration = _configuration()
-    async with dtc_query_client.api_client.ApiClient(configuration) as api_client:
-        api = dtc_query_client.api.HydropowerApi(api_client)
-        request = dtc_query_client.models.HydropowerGaussianRandomFieldRequest(
-            start_date=start_date,
-            end_date=end_date,
-            dataset_name=dataset_name,
-            grid_res_x=grid_res_x,
-            grid_res_y=grid_res_y,
-        )
-        progress(f"GRF: submitting {dataset_name} ...")
-        submitted = await api.submit_grf_job(request)
-        progress(f"GRF: job {submitted.job_id}, waiting (a cached run returns in seconds)")
-        path = await _await_job(api_client, submitted.job_id, GRF_OUTPUT_KEY, "GRF")
+    api = dtc_query_client.api.HydropowerApi(api_client)
+    request = dtc_query_client.models.HydropowerGaussianRandomFieldRequest(
+        start_date=start_date,
+        end_date=end_date,
+        dataset_name=dataset_name,
+        grid_res_x=grid_res_x,
+        grid_res_y=grid_res_y,
+    )
+    progress(f"GRF: submitting {dataset_name} ...")
+    submitted = await api.submit_grf_job(request)
+    progress(f"GRF: job {submitted.job_id}, waiting (a cached run returns in seconds)")
+    path = await _await_job(api_client, submitted.job_id, GRF_OUTPUT_KEY, "GRF")
     progress("GRF: done")
     return path
 
 
-async def run_fts_job(data_path: str, curve_time_points: int = 5, num_pca: int = 2,
+async def run_fts_job(api_client: ApiClient, data_path: str, curve_time_points: int = 5, num_pca: int = 2,
                       num_factors: int = 3, forecast_horizon: int = 3,
                       progress: Progress = print) -> str:
     """
@@ -198,6 +165,8 @@ async def run_fts_job(data_path: str, curve_time_points: int = 5, num_pca: int =
 
     Parameters
     ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
     data_path : str
         Output of a GRF job, as :func:`run_grf_job` returns it.
     curve_time_points : int, optional
@@ -214,26 +183,23 @@ async def run_fts_job(data_path: str, curve_time_points: int = 5, num_pca: int =
     str
         Path of the coefficients the workflow wrote.
     """
-    configuration = _configuration()
-    # A fresh client for the second call, as in the API's own test script.
-    async with dtc_query_client.api_client.ApiClient(configuration) as api_client:
-        api = dtc_query_client.api.HydropowerApi(api_client)
-        request = dtc_query_client.models.HydropowerFunctionalTimeSeriesRequest(
-            data_path=data_path,
-            curve_time_points=curve_time_points,
-            num_pca=num_pca,
-            num_factors=num_factors,
-            forecast_horizon=forecast_horizon,
-        )
-        progress("FTS: submitting ...")
-        submitted = await api.submit_fts_job(request)
-        progress(f"FTS: job {submitted.job_id}, waiting")
-        path = await _await_job(api_client, submitted.job_id, FTS_OUTPUT_KEY, "FTS")
+    api = dtc_query_client.api.HydropowerApi(api_client)
+    request = dtc_query_client.models.HydropowerFunctionalTimeSeriesRequest(
+        data_path=data_path,
+        curve_time_points=curve_time_points,
+        num_pca=num_pca,
+        num_factors=num_factors,
+        forecast_horizon=forecast_horizon,
+    )
+    progress("FTS: submitting ...")
+    submitted = await api.submit_fts_job(request)
+    progress(f"FTS: job {submitted.job_id}, waiting")
+    path = await _await_job(api_client, submitted.job_id, FTS_OUTPUT_KEY, "FTS")
     progress("FTS: done")
     return path
 
 
-async def download_dataset(dataset_id: str, start_date: str = "2006-01-01",
+async def download_dataset(api_client: ApiClient, dataset_id: str, start_date: str = "2006-01-01",
                            end_date: str = "2026-01-01",
                            variables: "list[str] | None" = None,
                            polygon: "dict | None" = None,
@@ -243,6 +209,8 @@ async def download_dataset(dataset_id: str, start_date: str = "2006-01-01",
 
     Parameters
     ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
     dataset_id : str
         A Use Case 1 collection, e.g. ``UC1_WATSON_DISCHARGE_GAUGE``.
     start_date, end_date : str, optional
@@ -259,29 +227,27 @@ async def download_dataset(dataset_id: str, start_date: str = "2006-01-01",
     str
         Path of the GeoZarr the endpoint wrote.
     """
-    configuration = _configuration()
-    async with dtc_query_client.api_client.ApiClient(configuration) as api_client:
-        api = dtc_query_client.api.GenericApi(api_client)
-        request = dtc_query_client.models.DataDownloadRequest(
-            dataset_id=dataset_id,
-            start_time=start_date,
-            end_time=end_date,
-            # from_dict rather than the plain dict: the field is a one-of
-            # wrapper, and handing it a dict leaves it unbound.
-            epsg4326_polygon_json=dtc_query_client.models.Epsg4326PolygonJson.from_dict(
-                polygon or WHOLE_WORLD),
-            variables=variables,
-        )
-        progress(f"download: submitting {dataset_id} ...")
-        submitted = await api.download_data(request)
-        progress(f"download: job {submitted.job_id}, waiting")
-        path = await _await_job(api_client, submitted.job_id,
-                                DOWNLOAD_OUTPUT_KEY, "download")
+    api = dtc_query_client.api.GenericApi(api_client)
+    request = dtc_query_client.models.DataDownloadRequest(
+        dataset_id=dataset_id,
+        start_time=start_date,
+        end_time=end_date,
+        # from_dict rather than the plain dict: the field is a one-of
+        # wrapper, and handing it a dict leaves it unbound.
+        epsg4326_polygon_json=dtc_query_client.models.Epsg4326PolygonJson.from_dict(
+            polygon or WHOLE_WORLD),
+        variables=variables,
+    )
+    progress(f"download: submitting {dataset_id} ...")
+    submitted = await api.download_data(request)
+    progress(f"download: job {submitted.job_id}, waiting")
+    path = await _await_job(api_client, submitted.job_id,
+                            DOWNLOAD_OUTPUT_KEY, "download")
     progress("download: done")
     return path
 
 
-async def discharge_series(start_date: str = "2006-01-01", end_date: str = "2026-01-01",
+async def discharge_series(api_client: ApiClient, start_date: str = "2006-01-01", end_date: str = "2026-01-01",
                            measured_only: bool = False,
                            progress: Progress = print) -> "object":
     """
@@ -289,6 +255,8 @@ async def discharge_series(start_date: str = "2006-01-01", end_date: str = "2026
 
     Parameters
     ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
     start_date, end_date : str, optional
         Time window, as ISO dates.
     measured_only : bool, optional
@@ -306,7 +274,7 @@ async def discharge_series(start_date: str = "2006-01-01", end_date: str = "2026
     import pandas as pd
 
     name = f"measured_{DISCHARGE_VARIABLE}" if measured_only else DISCHARGE_VARIABLE
-    path = await download_dataset("UC1_WATSON_DISCHARGE_GAUGE", start_date, end_date,
+    path = await download_dataset(api_client, "UC1_WATSON_DISCHARGE_GAUGE", start_date, end_date,
                                   variables=[name], progress=progress)
     progress("download: reading the gauge record back")
     ds = open_store(path)
@@ -337,7 +305,7 @@ def linear_scale(frame: "object", variable: str) -> "object":
     return 10.0 ** frame if variable.startswith("log10_") else frame
 
 
-async def published_fields(dataset_id: str, start_date: str = "2006-01-01",
+async def published_fields(api_client: ApiClient, dataset_id: str, start_date: str = "2006-01-01",
                            end_date: str = "2026-01-01",
                            variable: "str | None" = None,
                            progress: Progress = print) -> dict:
@@ -346,6 +314,8 @@ async def published_fields(dataset_id: str, start_date: str = "2006-01-01",
 
     Parameters
     ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
     dataset_id : str
         A Use Case 1 collection, e.g. ``UC1_WATSON_LAKE_INTENSITY``.
     start_date, end_date : str, optional
@@ -371,7 +341,7 @@ async def published_fields(dataset_id: str, start_date: str = "2006-01-01",
     import numpy as np
     import pandas as pd
 
-    path = await download_dataset(dataset_id, start_date, end_date, progress=progress)
+    path = await download_dataset(api_client, dataset_id, start_date, end_date, progress=progress)
     progress("download: reading the field back")
     ds = open_store(path)
     if variable is None:
@@ -394,7 +364,7 @@ async def published_fields(dataset_id: str, start_date: str = "2006-01-01",
     return {"path": path, "fields": linear_scale(frame, variable), "variable": variable}
 
 
-async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
+async def grf_fields(api_client: ApiClient, dataset_name: str, start_date: str = "2006-01-01",
                      end_date: str = "2026-01-01", grid_res_x: int = 100,
                      grid_res_y: int = 100, progress: Progress = print) -> dict:
     """
@@ -407,6 +377,8 @@ async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
 
     Parameters
     ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
     dataset_name : str
         A Use Case 1 collection, e.g. ``UC1_WATSON_RUNOFF_INPUT_RACMO55``.
     start_date, end_date : str, optional
@@ -429,7 +401,7 @@ async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
     import numpy as np
     import pandas as pd
 
-    path = await run_grf_job(dataset_name, start_date, end_date,
+    path = await run_grf_job(api_client, dataset_name, start_date, end_date,
                              grid_res_x, grid_res_y, progress=progress)
     progress("GRF: reading the fitted field back")
     ds = open_store(path)
@@ -479,7 +451,7 @@ async def grf_fields(dataset_name: str, start_date: str = "2006-01-01",
             "variable": variable}
 
 
-async def fts_coefficients(data_path: str, curve_time_points: int = 5, num_pca: int = 2,
+async def fts_coefficients(api_client: ApiClient, data_path: str, curve_time_points: int = 5, num_pca: int = 2,
                            num_factors: int = 3, forecast_horizon: int = 3,
                            progress: Progress = print) -> dict:
     """
@@ -492,6 +464,8 @@ async def fts_coefficients(data_path: str, curve_time_points: int = 5, num_pca: 
 
     Parameters
     ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
     data_path : str
         Output of a GRF job.
     curve_time_points, num_pca, num_factors, forecast_horizon : int, optional
@@ -514,7 +488,7 @@ async def fts_coefficients(data_path: str, curve_time_points: int = 5, num_pca: 
     import numpy as np
     import pandas as pd
 
-    path = await run_fts_job(data_path, curve_time_points, num_pca,
+    path = await run_fts_job(api_client, data_path, curve_time_points, num_pca,
                              num_factors, forecast_horizon, progress=progress)
     progress("FTS: reading the coefficients back")
     ds = open_store(path)

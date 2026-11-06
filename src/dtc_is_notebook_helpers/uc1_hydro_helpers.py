@@ -777,10 +777,40 @@ def collapsed(frame: pd.DataFrame, summary: str, decimals: int = 2) -> None:
 
 
 # --------------------------------------------------------------------------
-# The catchment outline
+# The catchment outline and the module's mesh
 # --------------------------------------------------------------------------
 
-def load_basin(source: str | Path) -> list[np.ndarray]:
+# Fixed geometry rather than observations, so it is not in the EO Data Store
+# and ships with this package instead.
+GEOMETRY_DIR = Path(__file__).parent / "geometry"
+BASIN_FILE = GEOMETRY_DIR / "watson_basin.csv"
+MESH_VERTICES_FILE = GEOMETRY_DIR / "mesh_vertices.csv"
+MESH_TRIANGLES_FILE = GEOMETRY_DIR / "mesh_triangles.csv"
+
+
+def load_mesh(vertices_file: str | Path = MESH_VERTICES_FILE,
+              triangles_file: str | Path = MESH_TRIANGLES_FILE) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Read the GRF module's mesh, as node coordinates and node index triples.
+
+    Parameters
+    ----------
+    vertices_file : str or pathlib.Path, optional
+        CSV of node coordinates, one node per row. The packaged mesh by default.
+    triangles_file : str or pathlib.Path, optional
+        CSV of triangles as node index triples. The packaged mesh by default.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        The vertices and the triangles.
+    """
+    vertices = pd.read_csv(vertices_file, header=None).to_numpy()
+    triangles = pd.read_csv(triangles_file, header=None).to_numpy()
+    return vertices, triangles
+
+
+def load_basin(source: str | Path = BASIN_FILE) -> list[np.ndarray]:
     """Read the catchment outline, as rings of (x, y), the exterior first.
 
     Written out from the project's `SurfaceBasin.shp` (EPSG:3413, the Watson
@@ -1205,4 +1235,3 @@ def shape_leave_one_year_out(discharge: pd.Series, monthly_mm: pd.Series,
 
     return pd.concat({"observed": observed.loc[years], "predicted": predicted},
                      axis=1)
-
