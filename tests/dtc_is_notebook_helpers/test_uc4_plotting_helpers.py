@@ -36,18 +36,19 @@ def _value(m, j, i):
     return (m - 10) + 0.1 * j + 0.01 * i
 
 
-def make_dataset(n_time=N_TIME, n_racmo=N_RACMO, racmo_start=RACMO_START) -> xr.Dataset:
+def make_dataset(n_time=N_TIME, n_racmo=N_RACMO, racmo_start=RACMO_START, pred_day=15) -> xr.Dataset:
     """Build a dataset with the same layout as the emulator output.
 
     Emulator = value(m); RACMO = value(m) - BIAS, so emulator - RACMO == BIAS for every matching month,
-    even when RACMO starts on a different month than the emulator.
+    even when RACMO starts on a different month than the emulator. The emulator months are stamped on day
+    `pred_day` of each month (the real output is stamped on the 1st).
     """
     x = 100_000 + 5_500 * np.arange(NX, dtype=float)
     y = -500_000 - 5_500 * np.arange(NY, dtype=float)  # descending, like a raster
     x_e = 90_000 + 27_500 * np.arange(NX_E, dtype=float)
     y_e = -480_000 - 27_500 * np.arange(NY_E, dtype=float)
 
-    t_pred = (pd.date_range("2020-01-01", periods=n_time, freq="MS") + pd.Timedelta(days=14)).to_numpy()
+    t_pred = (pd.date_range("2020-01-01", periods=n_time, freq="MS") + pd.Timedelta(days=pred_day - 1)).to_numpy()
     t_ref = pd.date_range("2020-01-01", periods=n_racmo, freq="MS").shift(racmo_start, freq="MS").to_numpy()
     t_pred, t_ref = t_pred.astype("datetime64[ns]"), t_ref.astype("datetime64[ns]")
 
@@ -613,24 +614,70 @@ def test_plot_single_date_has_four_map_panels_and_three_colourbars(ds, offline_c
     assert len(fig.axes) == 7
 
 
-def test_plot_single_date_uses_nearest_time_step(ds, offline_coastlines):
-    """Test that plot_single_date uses the nearest time step to the requested date."""
-    # 2020-06-20 is closest to the 15 June step; both calls must draw identical predictions.
-    a = h.plot_single_date(ds, datetime(2020, 6, 20))
-    b = h.plot_single_date(ds, datetime(2020, 6, 15))
-    pa = a.axes[2].collections[0].get_array()
-    pb = b.axes[2].collections[0].get_array()
-    np.testing.assert_array_equal(np.asarray(pa), np.asarray(pb))
+MONTH_CASES = [
+    (datetime(2020, 3, 21), "2020-03"),  # after mid-month: must not jump to the next month
+    (datetime(2020, 3, 1), "2020-03"),
+    (datetime(2020, 1, 1), "2020-01"),  # first day of the first month
+    (datetime(2021, 12, 31), "2021-12"),  # last day of the last month
+]
 
 
-def test_plot_validation_bias_panel_is_symmetric_about_zero(ds, offline_coastlines):
+@pytest.mark.parametrize("pred_day", [1, 15])
+@pytest.mark.parametrize(("date", "month"), MONTH_CASES)
+@pytest.mark.parametrize("func", DATE_FUNCS, ids=DATE_FUNC_IDS)
+def test_date_plots_use_the_month_of_the_date(func, date, month, pred_day):
+    """Test that both date plots show the calendar month of the requested date, for any day-of-month stamping."""
+    full = make_dataset(n_racmo=N_TIME, pred_day=pred_day)  # RACMO for every month, so validation always works
+    assert func(full, date)._suptitle.get_text().endswith(month)
+
+
+@pytest.mark.parametrize("pred_day", [1, 15])
+@pytest.mark.parametrize(("date", "month"), MONTH_CASES)
+def test_plot_single_date_draws_the_predictions_of_the_month(date, month, pred_day):
+    """Test that plot_single_date draws the predictions of the requested calendar month."""
+    ds = make_dataset(pred_day=pred_day)
+    fig = h.plot_single_date(ds, date)
+    expected = ds["predictions"].isel(time=list(pd.DatetimeIndex(ds["time"].values).strftime("%Y-%m")).index(month))
+    np.testing.assert_array_equal(np.asarray(fig.axes[2].collections[0].get_array()), expected.values)
+
+
+@pytest.mark.filterwarnings("error::RuntimeWarning")
+@pytest.mark.parametrize(
+    ("drop_racmo", "date"),
+    [(False, datetime(2021, 12, 1)), (True, datetime(2020, 6, 1))],
+    ids=["month-after-racmo-ends", "no-racmo-in-dataset"],
+)
+def test_plot_single_date_without_racmo_shows_placeholder(ds, drop_racmo, date):
+    """Test that a month without RACMO gets a placeholder and a colour range from the prediction only."""
+    if drop_racmo:
+        ds = ds.drop_vars(["target_patches", "time_r"])
+    fig = h.plot_single_date(ds, date)
+    assert any("No RACMO reference" in t.get_text() for t in fig.axes[1].texts)
+    predictions = np.asarray(fig.axes[2].collections[0].get_array())
+    norm = fig.axes[2].collections[0].norm
+    assert (norm.vmin, norm.vmax) == pytest.approx((predictions.min(), predictions.max()))
+
+
+def test_plot_single_date_with_racmo_has_no_placeholder(ds):
+    """Test that a month with RACMO data does not show the placeholder."""
+    fig = h.plot_single_date(ds, datetime(2020, 6, 1))
+    assert not any("No RACMO reference" in t.get_text() for t in fig.axes[1].texts)
+
+
+def test_plot_single_date_draws_location_star_once(ds):
+    """Test that the tile-location panel draws the requested-location star once."""
+    fig = h.plot_single_date(ds, datetime(2020, 6, 1))
+    assert len(fig.axes[3].lines) == 1
+
+
+def test_plot_validation_bias_panel_is_symmetric_about_zero(ds):
     """Test that the bias panel in the validation plot is symmetric about zero, with vmin = -vmax."""
     fig = h.plot_validation(ds, datetime(2020, 6, 15))
     mesh = fig.axes[0].collections[0]
     assert mesh.norm.vmin == pytest.approx(-mesh.norm.vmax)
 
 
-def test_plot_validation_bias_is_predictions_minus_target(ds, offline_coastlines):
+def test_plot_validation_bias_is_predictions_minus_target(ds):
     """Test that the bias panel in the validation plot is computed as predictions minus target."""
     fig = h.plot_validation(ds, datetime(2020, 6, 15))
     drawn = np.asarray(fig.axes[0].collections[0].get_array())
@@ -638,21 +685,21 @@ def test_plot_validation_bias_is_predictions_minus_target(ds, offline_coastlines
     np.testing.assert_allclose(drawn, BIAS, atol=1e-4)
 
 
-def test_plot_validation_rmse_panel_starts_at_zero(ds, offline_coastlines):
+def test_plot_validation_rmse_panel_starts_at_zero(ds):
     """Test that the RMSE panel in the validation plot has a colour scale starting at zero."""
     fig = h.plot_validation(ds, datetime(2020, 6, 15))
     rmse_mesh = next(c for ax in fig.axes for c in ax.collections if c.get_cmap().name == "inferno_r")
     assert rmse_mesh.norm.vmin == 0.0
 
 
-def test_plot_validation_ignores_nan_in_distributions(ds, offline_coastlines):
+def test_plot_validation_ignores_nan_in_distributions(ds):
     """Test that the validation plot ignores NaN values when computing distributions."""
     ds["predictions"][5, 0, 0] = np.nan
     ds["target_patches"][5, 1, 1] = np.nan
     assert isinstance(h.plot_validation(ds, datetime(2020, 6, 15)), Figure)
 
 
-def test_plot_validation_with_no_finite_values_raises(ds, offline_coastlines):
+def test_plot_validation_with_no_finite_values_raises(ds):
     """Test that the validation plot raises a ValueError when there are no finite values."""
     # RACMO stays finite so the RACMO-availability check passes; the distribution check must then trigger.
     ds["predictions"][:] = np.nan
@@ -666,7 +713,7 @@ def test_plot_validation_with_no_finite_values_raises(ds, offline_coastlines):
 
 
 @pytest.fixture
-def no_show_no_coast(offline_coastlines, monkeypatch):
+def no_show_no_coast(monkeypatch):
     """Prevent the tests from showing a matplotlib window and from trying to draw coastlines."""
     monkeypatch.setattr(plt, "show", lambda *a, **k: None)
 

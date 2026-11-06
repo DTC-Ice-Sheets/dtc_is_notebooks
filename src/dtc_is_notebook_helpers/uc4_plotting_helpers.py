@@ -33,7 +33,7 @@ EMU_COLOR = "#d55e00"  # emulator
 SMB_CMAP = "RdBu"  # blue = net accumulation, red = net loss (same as the dashboard)
 
 # all the ERA5 channels are standardised per tile
-ERA5_UNITS = {"d2m": "K", "msl": "Pa","sp": "Pa",  "sst": "K", "t2m": "K", "tp": "m", "u10": "m/s", "v10": "m/s"}
+ERA5_UNITS = {"d2m": "K", "msl": "Pa", "sp": "Pa", "sst": "K", "t2m": "K", "tp": "m", "u10": "m/s", "v10": "m/s"}
 SMB_UNITS = "mm w.e. yr-1"
 
 
@@ -226,6 +226,21 @@ def era5_label(channel: str) -> str:
 
 
 def _validate_selected_month(out_ds: xr.Dataset, selected_date: datetime) -> None:
+    """
+    Check that the calendar month of `selected_date` is one of the emulator's months.
+
+    Parameters
+    ----------
+    out_ds : xr.Dataset
+        The emulator output dataset.
+    selected_date : datetime
+        The date to check. Only its year and month are used.
+
+    Raises
+    ------
+    ValueError
+        If the dataset has no time step in the month of `selected_date`.
+    """
     dataset_months = pd.DatetimeIndex(out_ds["time"].values).to_period("M")
     requested_month = pd.Period(selected_date, "M")
 
@@ -440,22 +455,22 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     mpl.figure.Figure
         The generated figure.
     """
-    # check if the date within the dataset range
+    # check that the month of the date is in the dataset
     _validate_selected_month(out_ds, selected_date)
 
-    # select the nearest date in the dataset to the provided date
+    # select the time step in the month of the provided date
     era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=np.datetime64(selected_date, "M"), method="nearest").values
     predictions_da = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest")
     target = reference_on_prediction_time(out_ds).sel(time=predictions_da.time).values
     predictions = predictions_da.values
-
-    if not np.isfinite(target).any():
-        print("No RACMO reference is available for the selected prediction month.") # noqa: T201
+    has_target = bool(np.isfinite(target).any())
 
     fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": POLAR})
 
-    vmin = np.nanmin([np.nanmin(predictions), np.nanmin(target)])
-    vmax = np.nanmax([np.nanmax(predictions), np.nanmax(target)])
+    # shared colour range of the RACMO and prediction panels; without RACMO, from the prediction only
+    smb_fields = [predictions, target] if has_target else [predictions]
+    vmin = min(np.nanmin(field) for field in smb_fields)
+    vmax = max(np.nanmax(field) for field in smb_fields)
 
     im0 = ax[0].pcolormesh(out_ds.x_era5.values,
                         out_ds.y_era5.values,
@@ -475,6 +490,8 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
                             transform=POLAR,
                             vmin=vmin, vmax=vmax)
     ax[1].set_title("RACMO reference \n[kg m-2]", fontsize=14)
+    if not has_target:
+        ax[1].text(0.5, 0.5, "No RACMO reference\nfor this month", transform=ax[1].transAxes, ha="center", va="center")
     ax[1].coastlines("50m", linewidth=0.5)
     ax[1].set_extent([out_ds.x.values.min(), out_ds.x.values.max(),
                         out_ds.y.values.min(), out_ds.y.values.max()],
@@ -508,16 +525,16 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
             (ext[0] * scale, ext[2] * scale), (ext[1] - ext[0]) * scale, (ext[3] - ext[2]) * scale,
             ec=color, fc=color, alpha=0.3, lw=1.2, **kw)
             )
-        ax[3].plot(x0 * scale, y0 * scale, "*", ms=14, mfc="gold", mec="k", **kw)
-        ax[3].set_title("Tile location", fontsize=13)
-        ax[3].legend(
-            handles=[
-                mpatches.Patch(fc="steelblue", alpha=0.4, label="Emulator output tile"),
-                mpatches.Patch(fc="coral", alpha=0.4, label="ERA5 input footprint"),
-                plt.Line2D([], [], marker="*", ls="", mfc="gold", mec="k", ms=11, label="Requested location"),
-            ],
-            loc="lower left", fontsize=8,
-        )
+    ax[3].plot(x0 * scale, y0 * scale, "*", ms=14, mfc="gold", mec="k", **kw)
+    ax[3].set_title("Tile location", fontsize=13)
+    ax[3].legend(
+        handles=[
+            mpatches.Patch(fc="steelblue", alpha=0.4, label="Emulator output tile"),
+            mpatches.Patch(fc="coral", alpha=0.4, label="ERA5 input footprint"),
+            plt.Line2D([], [], marker="*", ls="", mfc="gold", mec="k", ms=11, label="Requested location"),
+        ],
+        loc="lower left", fontsize=8,
+    )
 
     # colorbar under each plot, except the overview (4th) panel
     for im, axis in ((im0, ax[0]), (im1, ax[1]), (im2, ax[2])):
@@ -552,14 +569,14 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     Raises
     ------
     ValueError
-        If the provided date is not within the range of the dataset.
+        If the month of the provided date is not in the dataset, or if there is no RACMO reference for that month.
 
     Returns
     -------
     mpl.figure.Figure
-        The function generates and displays the plots for the specified date.
+        The generated figure.
     """
-    # check if the date within the dataset range
+    # check that the month of the date is in the dataset
     _validate_selected_month(out_ds, selected_date)
 
     predictions_da = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest")
