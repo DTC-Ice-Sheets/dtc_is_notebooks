@@ -280,31 +280,6 @@ class ProfileModel:
         leverage = np.einsum("i,kij,j->k", vector, self.xtx_inv, vector)
         return self.residual_sd * np.sqrt(1.0 + np.clip(leverage, 0.0, None))
 
-    def leverage(self, values: Values) -> float:
-        """
-        How far outside the fitted range a predictor sits, as a ratio.
-
-        1.0 means the band is as wide as it would be at the centre of the
-        training data. Larger values mean extrapolation; the number is the
-        factor by which the interval has widened in response.
-
-        Parameters
-        ----------
-        values : float or array-like
-            One season's predictor values.
-
-        Returns
-        -------
-        float
-            The ratio of the band width here to the width at the centre of the
-            training data.
-        """
-        if self.xtx_inv is None:
-            return 1.0
-        centre = np.nanmean(self.prediction_se(np.nanmean(_design_rows(self), axis=0)))
-        here = np.nanmean(self.prediction_se(values))
-        return float(here / centre) if centre else 1.0
-
     def band(self, values: Values, level: float = 0.68) -> pd.DataFrame:
         """
         Prediction interval around one profile.
@@ -373,20 +348,6 @@ class ProfileModel:
                 f"{len(self.years)} seasons ({self.years.min()}-{self.years.max()}), "
                 f"predictors {', '.join(self.names)}, "
                 f"median step r2 {np.nanmedian(self.r2):.2f}")
-
-
-def _design_rows(model: "ProfileModel") -> np.ndarray:
-    """Recover the predictor values the model was fitted on, from (X'X)^-1.
-
-    Only the centroid is needed, and for a fitted design that is available from
-    the inverse cross-product: the intercept row of (X'X)^-1 encodes it.
-    """
-    inv = model.xtx_inv[np.isfinite(model.xtx_inv).all(axis=(1, 2))]
-    if not len(inv):
-        return np.zeros((1, max(len(model.names), 1)))
-    xtx = np.linalg.inv(inv[0])
-    n = xtx[0, 0]
-    return (xtx[0, 1:] / n)[None, :] if n else np.zeros((1, xtx.shape[0] - 1))
 
 
 def _t_quantile(p: float, dof: int) -> float:
@@ -1382,26 +1343,6 @@ class ShapeModel:
                            0.05 * self.residual_sd, None)
         leverage = 1.0 / self.n + (curve - self.xbar) ** 2 / self.sxx
         return local_sd * np.sqrt(1.0 + np.clip(leverage, 0.0, None))
-
-    def leverage(self, values: Values) -> float:
-        """
-        Say how wide this season's band is against a typical one.
-
-        Parameters
-        ----------
-        values : int or array-like
-            A year, or a curve.
-
-        Returns
-        -------
-        float
-            The ratio of this season's mean standard error to the average over the
-            fitted seasons.
-        """
-        here = float(np.nanmean(self.prediction_se(values)))
-        centre = float(np.nanmean(
-            [np.nanmean(self.prediction_se(int(y))) for y in self.years]))
-        return here / centre if centre else 1.0
 
     def _multiplier(self, level: float) -> float:
         return _t_quantile(0.5 + level / 2.0, self.dof)

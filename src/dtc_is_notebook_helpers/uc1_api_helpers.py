@@ -303,62 +303,6 @@ def linear_scale(frame: pd.DataFrame, variable: str) -> pd.DataFrame:
     return 10.0 ** frame if variable.startswith("log10_") else frame
 
 
-async def published_fields(api_client: ApiClient, dataset_id: str, start_date: str = "2006-01-01",
-                           end_date: str = "2026-01-01",
-                           variable: str | None = None,
-                           progress: Progress = print) -> dict:
-    """
-    Fetch one published collection and read its field back as a table.
-
-    Parameters
-    ----------
-    api_client : dtc_query_client.api_client.ApiClient
-        An authenticated client.
-    dataset_id : str
-        A Use Case 1 collection, e.g. ``UC1_WATSON_LAKE_INTENSITY``.
-    start_date, end_date : str, optional
-        Time window, as ISO dates.
-    variable : str, optional
-        Which variable to read. By default the only one that varies in space
-        as well as time, which is what every input collection holds.
-    progress : callable, optional
-        Called with a line of progress.
-
-    Returns
-    -------
-    dict
-        ``path`` where the download was written, ``fields`` a frame of
-        timestamps by position on the variable's linear scale, and
-        ``variable`` the name it was read from.
-
-    Raises
-    ------
-    ValueError
-        If the store holds no variable that varies in space and time.
-    """
-    path = await download_dataset(api_client, dataset_id, start_date, end_date, progress=progress)
-    progress("download: reading the field back")
-    ds = open_store(path)
-    if variable is None:
-        spatial = [str(name) for name, array in ds.data_vars.items()
-                   if "time" in array.dims and len(array.dims) > 1]
-        if not spatial:
-            raise ValueError(
-                f"{dataset_id} holds no variable that varies in space and time. "
-                f"It holds: {', '.join(sorted(str(v) for v in ds.data_vars)) or 'nothing'}",
-            )
-        variable = spatial[0]
-
-    array = ds[variable]
-    positions = [str(dimension) for dimension in array.dims if dimension != "time"]
-    flattened = array.stack(position=positions) if len(positions) > 1 else array
-    frame = pd.DataFrame(
-        np.asarray(flattened.transpose("time", ...).values, dtype=float),
-        index=pd.DatetimeIndex(ds["time"].values))
-    progress(f"download: {frame.shape[0]} timesteps over {frame.shape[1]} cells")
-    return {"path": path, "fields": linear_scale(frame, variable), "variable": variable}
-
-
 async def grf_fields(api_client: ApiClient, dataset_name: str, start_date: str = "2006-01-01",
                      end_date: str = "2026-01-01", grid_res_x: int = 100,
                      grid_res_y: int = 100, progress: Progress = print) -> dict:
