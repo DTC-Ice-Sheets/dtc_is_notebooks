@@ -314,13 +314,32 @@ def test_the_fields_coefficients_are_taken_over_the_uncertainty_ones(tmp_path, m
     np.testing.assert_allclose(result["coefficients"].to_numpy()[0], [0.0, 1.0, 2.0])
 
 
+@pytest.mark.parametrize("dims", [("curve_id", "coef_id"), ("coef_id", "curve_id")])
+def test_named_dimensions_decide_which_axis_holds_the_curves(tmp_path, monkeypatch, mock_api_client, dims):
+    """Two seasons and three factors is already curves by factor, and must not be flipped."""
+    curves_by_factor = np.arange(6, dtype=float).reshape(2, 3)
+    values = curves_by_factor if dims[0] == "curve_id" else curves_by_factor.T
+    ds = xr.Dataset(data_vars={"coefficients": (dims, values)},
+                    coords={"curve_id": np.arange(2), "coef_id": np.arange(3)})
+    store = tmp_path / "short.zarr"
+    ds.to_zarr(store, mode="w", consolidated=True, zarr_format=2)
+
+    async def fake_run(*args, **kwargs):
+        return str(store)
+
+    monkeypatch.setattr(api, "run_fts_job", fake_run)
+    result = asyncio.run(api.fts_coefficients(mock_api_client, "somewhere.zarr", progress=lambda _: None))
+
+    np.testing.assert_allclose(result["coefficients"].to_numpy(), curves_by_factor)
+
+
 def test_an_output_with_nothing_readable_names_what_it_holds(tmp_path, monkeypatch, mock_api_client):
     ds = xr.Dataset(data_vars={"only_one": (("coef_id",), np.array([1.0, 2.0]))},
                     coords={"coef_id": np.arange(2)})
     store = tmp_path / "odd.zarr"
     ds.to_zarr(store, mode="w", consolidated=True, zarr_format=2)
 
-    async def fake_run(*args, **kwargs):                # noqa: ANN002, ANN003, ARG001
+    async def fake_run(*args, **kwargs):
         return str(store)
 
     monkeypatch.setattr(api, "run_fts_job", fake_run)

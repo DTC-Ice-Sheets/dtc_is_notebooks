@@ -109,10 +109,12 @@ def seasonal_predictor(runoff: pd.Series) -> pd.Series:
         named ``seasonal_runoff``.
     """
     melt = runoff[runoff.index.month.isin(MELT_MONTHS)]
-    counts = melt.groupby(melt.index.year).size()
+    counts = melt.groupby(melt.index.year).count()
     # A season the archive only half covers sums to a small total and would be
     # read as a quiet melt year. RACMO stops on 31 August 2021, so this matters.
-    complete = counts[counts == counts.max()].index
+    # A month that is present but NaN counts as missing for the same reason.
+    expected = melt.groupby(melt.index.year).size().max()
+    complete = counts[counts == expected].index
     totals = melt.groupby(melt.index.year).sum()
     dropped = [int(y) for y in totals.index if y not in complete]
     if dropped:
@@ -1314,7 +1316,7 @@ class ShapeModel:
         pandas.DataFrame
             Discharge in m3/s, years by step.
         """
-        index = getattr(years, "index", years)
+        index = years.index if isinstance(years, pd.Series | pd.DataFrame) else years
         return pd.DataFrame({int(y): self.profile(int(y)) for y in index}).T
 
     def prediction_se(self, values: Values) -> np.ndarray:

@@ -437,10 +437,13 @@ async def fts_coefficients(api_client: ApiClient, data_path: str, curve_time_poi
 
     if len(two_d) == 1:
         name = two_d[0]
-        values = np.asarray(ds[name].values, dtype=float)
-        # Curves are the longer axis; factors are few.
-        if values.shape[0] < values.shape[1]:
-            values = values.T
+        array = ds[name]
+        if {"curve_id", "coef_id"} <= set(array.dims):
+            array = array.transpose("curve_id", "coef_id")
+        elif array.shape[0] < array.shape[1]:
+            # Curves are the longer axis; factors are few.
+            array = array.T
+        values = np.asarray(array.values, dtype=float)
         frame = pd.DataFrame(
             values, columns=[f"factor_{i + 1}" for i in range(values.shape[1])])
         layout = f"read {name} with dims {held[name]} as curves by factor"

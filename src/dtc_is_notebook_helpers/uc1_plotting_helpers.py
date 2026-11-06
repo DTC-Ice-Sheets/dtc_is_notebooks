@@ -330,7 +330,7 @@ def plot_runoff_map(fields: pd.DataFrame, points: np.ndarray, rings: list[np.nda
     ax.set_ylabel("kilometres northing")
     ax.set_title(f"GRF output: mean July field, {forcing}", loc="left")
     bar = fig.colorbar(surface, ax=ax)
-    ticks = [t for t in range(-2, 5) if intensity.min() <= t <= intensity.max()]
+    ticks = [t for t in range(-2, 5) if np.nanmin(intensity) <= t <= np.nanmax(intensity)]
     bar.set_ticks(ticks)
     bar.set_ticklabels([f"{10.0 ** t:g}" for t in ticks])
     bar.set_label("mean July runoff (mm w.e.)")
@@ -387,7 +387,7 @@ def plot_lake_season(lake_fields: pd.DataFrame, lake_points: np.ndarray,
     left.set_title("Average July lake cover", loc="left", pad=10)
     bar = fig.colorbar(field, ax=left, orientation="horizontal",
                        fraction=0.055, pad=0.06, aspect=34)
-    ticks = [t for t in (-4, -3, -2, -1, 0) if intensity.min() <= t <= intensity.max()]
+    ticks = [t for t in (-4, -3, -2, -1, 0) if np.nanmin(intensity) <= t <= np.nanmax(intensity)]
     bar.set_ticks(ticks)
     bar.set_ticklabels([f"{100 * 10.0 ** t:g}%" for t in ticks])
     bar.set_label("share of a cell covered by lakes", size=10)

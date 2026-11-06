@@ -133,6 +133,13 @@ def test_seasonal_predictor_drops_a_half_covered_season():
     assert list(seasonal.index) == [2020]
 
 
+def test_seasonal_predictor_drops_a_season_with_a_missing_month():
+    months = pd.date_range("2020-05-01", "2021-09-01", freq="MS")
+    runoff = pd.Series(1.0, index=months[months.month.isin(uc1.MELT_MONTHS)])
+    runoff[pd.Timestamp("2021-07-01")] = np.nan
+    assert list(uc1.seasonal_predictor(runoff).index) == [2020]
+
+
 def test_propagation_widens_the_band_and_the_budget_agrees(model):
     without = uc1.propagate(model, 1.5, 0.0, draws=400)
     with_sd = uc1.propagate(model, 1.5, 0.08, draws=400)
@@ -217,6 +224,13 @@ def test_shape_model_profiles_cover_every_season(discharge, monthly):
     profiles = model.profiles(model.years)
     assert list(profiles.index) == list(model.years)
     assert (profiles.to_numpy() >= 0).all()
+
+
+@pytest.mark.parametrize("as_years", [list, tuple, np.array, pd.Index])
+def test_shape_model_profiles_take_any_sequence_of_years(discharge, monthly, as_years):
+    model = uc1.ShapeModel.fit(discharge, monthly)
+    chosen = [int(year) for year in model.years[:2]]
+    assert list(model.profiles(as_years(chosen)).index) == chosen
 
 
 def test_shape_model_bands_widen_with_coverage(discharge, monthly):

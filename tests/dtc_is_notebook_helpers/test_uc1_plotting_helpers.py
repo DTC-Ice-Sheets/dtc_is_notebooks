@@ -272,6 +272,30 @@ def test_plot_forcing_comparison_keeps_each_forcing_in_its_colour(forcing_totals
             assert colours[f"from {label}"] == uc1_plot.FORCING_COLOURS[key]
 
 
+@pytest.mark.parametrize(
+    ("draw", "low", "high", "expected_ticks"),
+    [
+        (lambda fields, points, f: uc1_plot.plot_runoff_map(
+            fields, points, f["rings"], *f["mesh"], "RACMO55"), 1.0, 500.0, [0, 1, 2]),
+        (lambda fields, points, f: uc1_plot.plot_lake_season(
+            fields, points, np.isfinite(fields.to_numpy()).all(axis=0), f["rings"], *f["mesh"]),
+         1e-3, 0.5, [-3, -2, -1]),
+    ],
+    ids=["runoff_map", "lake_season"],
+)
+def test_map_colour_bar_keeps_its_ticks_when_some_cells_have_no_value(chain, grid_points, draw, low,
+                                                                       high, expected_ticks):
+    months = pd.date_range("2014-05-01", "2014-09-01", freq="MS")
+
+    cells = np.geomspace(low, high, len(grid_points))
+    cells[10:13] = np.nan
+    fields = pd.DataFrame(np.tile(cells, (len(months), 1)), index=months)
+
+    figure = draw(fields, grid_points, chain)
+    bar = next(ax for ax in figure.axes if ax.get_label() == "<colorbar>")
+    np.testing.assert_allclose(bar._colorbar.get_ticks(), expected_ticks)
+
+
 def test_plot_lake_season_names_the_biggest_and_smallest_season(grid_points, rings, mesh):
     fields = _monthly_fields(grid_points, 2014, 2016, 1e-4, 0.01)
     fields.loc[fields.index.year == 2015] *= 10.0       # 2015 the biggest season
