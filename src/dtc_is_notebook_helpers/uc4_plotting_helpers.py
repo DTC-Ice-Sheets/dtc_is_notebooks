@@ -399,6 +399,11 @@ def build_explorer(
     for j in (1, 2, 3):  # square pixels on the maps
         fig.update_xaxes(title_text="x [km]", constrain="domain", row=1, col=j)
         fig.update_yaxes(scaleanchor="x" if j == 1 else f"x{j}", scaleratio=1, constrain="domain", row=1, col=j)
+    # Fix each map to its tile, so a month without data (e.g. no RACMO) does not zoom onto the placeholder text
+    for j, (grid_x, grid_y) in enumerate(((era5_xk, era5_yk), (xk, yk), (xk, yk)), start=1):
+        x_min, x_max, y_min, y_max = _extent(grid_x, grid_y)
+        fig.update_xaxes(range=[x_min, x_max], row=1, col=j)
+        fig.update_yaxes(range=[y_min, y_max], row=1, col=j)
     fig.update_yaxes(title_text="y [km]", row=1, col=1)
     fig.update_xaxes(title_text="Month", row=2, col=1)
     fig.update_yaxes(title_text=f"SMB [{units.replace('$^{-2}$', '-2')}]", row=2, col=1, secondary_y=False)

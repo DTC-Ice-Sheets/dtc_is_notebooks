@@ -538,6 +538,20 @@ def test_build_explorer_requested_location_star_in_each_map(ds):
     assert all(s.x[0] == pytest.approx(ds.attrs["x_3031"] / 1e3) for s in stars)
 
 
+@pytest.mark.parametrize("drop_racmo", [False, True])
+def test_build_explorer_maps_cover_the_whole_tile(ds, drop_racmo):
+    """Test that each map's axes span its tile, also when the RACMO map has no data to autoscale on."""
+    if drop_racmo:
+        ds = ds.drop_vars(["target_patches", "time_r"])
+    layout = h.build_explorer(ds, stride=1).layout
+    grids = {"": ("x_era5", "y_era5"), "2": ("x", "y"), "3": ("x", "y")}  # ERA5, emulator, RACMO
+    for suffix, (xname, yname) in grids.items():
+        x_km, y_km = ds[xname].values / 1e3, ds[yname].values / 1e3
+        x_range, y_range = layout[f"xaxis{suffix}"].range, layout[f"yaxis{suffix}"].range
+        assert x_range[0] < x_km.min() and x_range[1] > x_km.max()
+        assert y_range[0] < y_km.min() and y_range[1] > y_km.max()
+
+
 def test_build_explorer_figure_is_json_serialisable(ds):
     """Test that the figure can be serialized to JSON, which is important for web applications."""
     assert h.build_explorer(ds).to_json()
