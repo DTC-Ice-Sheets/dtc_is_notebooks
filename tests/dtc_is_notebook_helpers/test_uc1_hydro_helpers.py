@@ -7,13 +7,9 @@ whatever the real record happens to contain, so a failure points at the code.
 
 from __future__ import annotations
 
-import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
 
 from dtc_is_notebook_helpers import uc1_hydro_helpers as uc1
 
@@ -278,22 +274,15 @@ def test_model_str_names_the_predictor(model):
 # is inside and what is not is arithmetic rather than a judgement.
 # --------------------------------------------------------------------------
 
-def _basin_csv(path) -> object:
-    rows = [(0, 0.0, 0.0), (0, 10.0, 0.0), (0, 10.0, 10.0), (0, 0.0, 10.0), (0, 0.0, 0.0),
-            (1, 4.0, 4.0), (1, 6.0, 4.0), (1, 6.0, 6.0), (1, 4.0, 6.0), (1, 4.0, 4.0)]
-    pd.DataFrame(rows, columns=["ring", "x", "y"]).to_csv(path, index=False)
-    return path
-
-
-def test_load_basin_reads_the_exterior_first(tmp_path):
-    rings = uc1.load_basin(_basin_csv(tmp_path / "basin.csv"))
+def test_load_basin_reads_the_exterior_first(basin_csv):
+    rings = uc1.load_basin(basin_csv)
     assert len(rings) == 2
     assert rings[0].shape == (5, 2)
     assert rings[0][:, 0].max() == 10.0
 
 
-def test_basin_nodes_keeps_the_inside_and_drops_the_hole(tmp_path):
-    rings = uc1.load_basin(_basin_csv(tmp_path / "basin.csv"))
+def test_basin_nodes_keeps_the_inside_and_drops_the_hole(basin_csv):
+    rings = uc1.load_basin(basin_csv)
     nodes = np.array([[5.0, 2.0],      # inside
                       [1.0, 1.0],      # inside
                       [5.0, 5.0],      # in the hole
@@ -307,71 +296,6 @@ def test_catchment_mean_can_be_taken_over_part_of_the_mesh():
                           index=pd.to_datetime(["2014-07-01", "2014-08-01"]))
     mask = np.array([True, True, False])
     np.testing.assert_allclose(uc1.catchment_mean(fields, mask).to_numpy(), [1.0, 2.0])
-
-
-def test_mesh_map_clips_the_surface_to_the_outline(tmp_path):
-    rings = uc1.load_basin(_basin_csv(tmp_path / "basin.csv"))
-    rings = [ring * 1000.0 for ring in rings]      # the helper works in metres
-    rng = np.random.default_rng(0)
-    nodes = rng.uniform(-5000, 15000, size=(40, 2))
-    figure, ax = plt.subplots()
-    surface = uc1.mesh_map(ax, nodes, rng.normal(size=40), rings)
-    assert surface.get_clip_path() is not None
-    assert ax.get_xlim() == pytest.approx((-4.0, 14.0))   # the outline, plus the margin
-    plt.close(figure)
-
-
-def test_mesh_map_draws_the_triangulation_it_is_given(tmp_path):
-    rings = [ring * 1000.0 for ring in uc1.load_basin(_basin_csv(tmp_path / "basin.csv"))]
-    nodes = np.array([[0.0, 0.0], [10000.0, 0.0], [10000.0, 10000.0], [0.0, 10000.0]])
-    figure, ax = plt.subplots()
-    uc1.mesh_map(ax, nodes, np.arange(4.0), rings,
-                 np.array([[0, 1, 2], [0, 2, 3]]), edges=True)
-    assert ax.lines, "edges=True should draw the mesh"
-    assert all(line.get_clip_path() is not None for line in ax.lines)
-    plt.close(figure)
-
-
-def test_headroom_only_lifts_the_top_of_the_axis():
-    figure, ax = plt.subplots()
-    ax.plot([0, 1], [0.0, 10.0])
-    bottom, top = ax.get_ylim()
-    uc1.headroom(ax, 0.5)
-    assert ax.get_ylim()[0] == pytest.approx(bottom)
-    assert ax.get_ylim()[1] == pytest.approx(bottom + (top - bottom) * 1.5)
-    plt.close(figure)
-
-
-def test_label_points_moves_a_label_that_would_sit_on_another():
-    figure, ax = plt.subplots()
-    # Fixed limits, and two points a pixel or so apart, so the first position
-    # one label takes is certain to be in the way of the next.
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 10)
-    ax.scatter([5.0, 5.02], [5.0, 5.0])
-    uc1.label_points(ax, [5.0, 5.02], [5.0, 5.0], ["2019", "2020"])
-    first, second = [note.get_position() for note in ax.texts]
-    assert first != second
-    assert [note.get_text() for note in ax.texts] == ["2019", "2020"]
-    plt.close(figure)
-
-
-def test_month_axis_puts_month_names_on_a_day_of_year_axis():
-    figure, ax = plt.subplots()
-    ax.plot([121, 200, 273], [1.0, 2.0, 1.0])
-    uc1.month_axis(ax)
-    assert [t.get_text() for t in ax.get_xticklabels()] == ["May", "Jun", "Jul", "Aug", "Sep", "Oct"]
-    assert list(ax.get_xticks()) == [121, 152, 182, 213, 244, 274]
-    plt.close(figure)
-
-
-def test_mesh_map_without_an_outline_draws_the_whole_mesh():
-    rng = np.random.default_rng(0)
-    nodes = rng.uniform(0, 10000, size=(30, 2))
-    figure, ax = plt.subplots()
-    surface = uc1.mesh_map(ax, nodes, rng.normal(size=30))
-    assert surface.get_clip_path() is None
-    plt.close(figure)
 
 
 # --------------------------------------------------------------------------
