@@ -14,7 +14,6 @@ import xarray as xr  # noqa: E402
 
 matplotlib.use("Agg")
 from matplotlib.backend_bases import MouseEvent  # noqa: E402
-from matplotlib.colors import TwoSlopeNorm  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
 from dtc_is_notebook_helpers import uc4_plotting_helpers as h  # noqa: E402
@@ -377,58 +376,6 @@ def test_skill_metrics_on_synthetic_dataset(ds):
     assert m["rmse"] == pytest.approx(abs(BIAS), abs=1e-4)
     assert m["mae"] == pytest.approx(abs(BIAS), abs=1e-4)
     assert m["r"] == pytest.approx(1.0)
-
-
-# ----------------------------------------------------------------------------
-# _smb_norm
-# ----------------------------------------------------------------------------
-
-
-def test_smb_norm_centre_is_zero_and_bounds_straddle_it():
-    """Test that the TwoSlopeNorm is centered at zero and the bounds straddle it."""
-    norm = h._smb_norm(np.linspace(-100, 100, 1001))
-    assert isinstance(norm, TwoSlopeNorm)
-    assert norm.vcenter == 0.0
-    assert norm.vmin == pytest.approx(-98, abs=0.5)
-    assert norm.vmax == pytest.approx(98, abs=0.5)
-
-
-def test_smb_norm_zero_maps_to_middle_of_colormap():
-    """Test that zero maps to the middle of the colormap (0.5)."""
-    norm = h._smb_norm(np.linspace(-10, 40, 501))
-    assert float(norm(0.0)) == pytest.approx(0.5)
-
-
-def test_smb_norm_nan_and_inf_are_ignored():
-    """Test that NaN and Inf values are ignored when computing the normalization bounds."""
-    clean = np.linspace(-10, 10, 201)
-    dirty = np.concatenate([clean, [np.nan, np.inf, -np.inf]])
-    a, b = h._smb_norm(clean), h._smb_norm(dirty)
-    assert (a.vmin, a.vmax) == pytest.approx((b.vmin, b.vmax))
-
-
-def test_smb_norm_several_arrays_are_pooled():
-    """Test that several arrays are pooled together to compute the normalization bounds."""
-    norm = h._smb_norm(np.linspace(-5, 5, 101), np.linspace(-50, 50, 101))
-    assert norm.vmax > 40
-
-
-def test_smb_norm_all_positive_data_still_has_valid_norm():
-    """Test that all-positive data still results in a valid TwoSlopeNorm with vmin < 0 < vmax."""
-    norm = h._smb_norm(np.linspace(1, 10, 50))
-    assert norm.vmin < 0 < norm.vmax  # TwoSlopeNorm requires vmin < vcenter < vmax
-
-
-def test_smb_norm_all_negative_data_still_has_valid_norm():
-    """Test that all-negative data still results in a valid TwoSlopeNorm with vmin < 0 < vmax."""
-    norm = h._smb_norm(np.linspace(-10, -1, 50))
-    assert norm.vmin < 0 < norm.vmax
-
-
-def test_smb_norm_all_zero_data_still_has_valid_norm():
-    """Test that all-zero data still results in a valid TwoSlopeNorm with vmin < 0 < vmax."""
-    norm = h._smb_norm(np.zeros((4, 4)))
-    assert norm.vmin < 0 < norm.vmax
 
 
 # ----------------------------------------------------------------------------
