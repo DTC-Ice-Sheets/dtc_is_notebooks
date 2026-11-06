@@ -2,8 +2,8 @@
 Exploration visuals for the DTC super-resolution SMB emulator (single location mode).
 
 Everything here works from one input: the dataset written by `run_postprocessing_loc`
-(the "rcm-emulator" output of the API job). 
-The code can be found here: 
+(the "rcm-emulator" output of the API job).
+The code can be found here:
 https://github.com/DTC-Ice-Sheets/dtc_super_resolution/blob/main/src/dtc_super_resolution/rcm_emulator_loc_entrypoint.py
 """
 
@@ -20,7 +20,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import seaborn as sns
 import xarray as xr
-from matplotlib.colors import TwoSlopeNorm
 from plotly.subplots import make_subplots
 
 POLAR = ccrs.Stereographic(central_latitude=-90.0, central_longitude=0.0, true_scale_latitude=-71.0)
@@ -35,7 +34,7 @@ SMB_CMAP = "coolwarm"  # blue = net accumulation, red = net loss (same as the da
 
 # all the ERA5 channels are standardised per tile
 ERA5_UNITS = {"d2m": "K", "msl": "Pa","sp": "Pa",  "sst": "K", "t2m": "K", "tp": "m", "u10": "m/s", "v10": "m/s"}
-SMB_UNITS = "mm w.e. yr-1"  
+SMB_UNITS = "mm w.e. yr-1"
 
 
 # ============================================================================
@@ -433,16 +432,16 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (date_min <= np.datetime64(selected_date, 'M') <= date_max):
+    if not (date_min <= np.datetime64(selected_date, "M") <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
     # select the nearest date in the dataset to the provided date
-    era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=np.datetime64(selected_date, 'M'), method="nearest").values
-    predictions = out_ds["predictions"].sel(time=np.datetime64(selected_date, 'M'), method="nearest").values
+    era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=np.datetime64(selected_date, "M"), method="nearest").values
+    predictions = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest").values
     target = reference_on_prediction_time(out_ds).sel(time_r=predictions.time).values
 
     if not np.isfinite(target).any():
-        print("No RACMO reference is available for the selected prediction month.")
+        print("No RACMO reference is available for the selected prediction month.") # noqa: T201
 
     fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": POLAR})
 
@@ -515,7 +514,8 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     for im, axis in ((im0, ax[0]), (im1, ax[1]), (im2, ax[2])):
         fig1.colorbar(im, ax=axis, orientation="horizontal", pad=0.05, shrink=0.9)
 
-    when = pd.Timestamp(out_ds["time"].sel(time=np.datetime64(selected_date, 'M'), method="nearest").values).strftime("%Y-%m")
+    sel_date = np.datetime64(selected_date, "M")
+    when = pd.Timestamp(out_ds["time"].sel(time=sel_date, method="nearest").values).strftime("%Y-%m")
     fig1.suptitle(f"Glaciated SMB emulator - Antarctica - {when}", fontsize=18)
     plt.tight_layout()
     plt.close()
@@ -553,10 +553,10 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (date_min <= np.datetime64(selected_date, 'M') <= date_max):
+    if not (date_min <= np.datetime64(selected_date, "M") <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
-    prediction = out_ds["predictions"].sel(time=np.datetime64(selected_date, 'M'), method="nearest")
+    prediction = out_ds["predictions"].sel(time=np.datetime64(selected_date, "M"), method="nearest")
     predictions = prediction.values
     target = reference_on_prediction_time(out_ds).sel(time=prediction.time).values
     if not np.isfinite(target).any():
@@ -666,7 +666,8 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     )
     ax[2].set_title(f"Predicted vs Target SMB Distribution [{SMB_UNITS}]", fontsize=14)
 
-    when = pd.Timestamp(out_ds["time"].sel(time=np.datetime64(selected_date, 'M'), method="nearest").values).strftime("%Y-%m")
+    sel_date = np.datetime64(selected_date, "M")
+    when = pd.Timestamp(out_ds["time"].sel(time=sel_date, method="nearest").values).strftime("%Y-%m")
     fig2.suptitle(f"Validation - {when}", fontsize=18)
     fig2.tight_layout()
     plt.close()
