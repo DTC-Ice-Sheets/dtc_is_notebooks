@@ -24,13 +24,13 @@ be replaced without disturbing those either side of it.
 from __future__ import annotations
 
 import logging
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import t as student_t
 
 logger = logging.getLogger(__name__)
 
@@ -230,8 +230,7 @@ class ProfileModel:
         here = np.nanmean(self.prediction_se(values))
         return float(here / centre) if centre else 1.0
 
-    def band(self, values: Values, sigmas: float | None = None,
-             level: float = 0.68) -> pd.DataFrame:
+    def band(self, values: Values, level: float = 0.68) -> pd.DataFrame:
         """Prediction interval around one profile.
 
         Pass `level` as the coverage you want - 0.68 for one sigma, 0.95 for
@@ -240,11 +239,9 @@ class ProfileModel:
         quantile: with fifteen seasons and two terms there are thirteen
         degrees of freedom, where t is 2.16 against the normal 1.96, so
         assuming normality would understate a 95% band by about ten per cent.
-
-        `sigmas` is kept for backwards compatibility and overrides `level`.
         """
         centre = self.profile(values)
-        spread = pd.Series(self.prediction_se(values) * self._multiplier(sigmas, level),
+        spread = pd.Series(self.prediction_se(values) * self._multiplier(level),
                            index=self.starts)
         return pd.DataFrame({"lower": (centre - spread).clip(lower=0),
                              "predicted": centre,
@@ -260,10 +257,8 @@ class ProfileModel:
             out[f"lower_{tag}"], out[f"upper_{tag}"] = b["lower"], b["upper"]
         return pd.DataFrame(out)
 
-    def _multiplier(self, sigmas: float | None, level: float) -> np.ndarray:
-        """T multiplier per step, or the plain sigma count if one was given."""
-        if sigmas is not None:
-            return np.full(len(self.starts), float(sigmas))
+    def _multiplier(self, level: float) -> np.ndarray:
+        """T multiplier per step."""
         dof = (self.dof if self.dof is not None
                else np.full(len(self.starts), max(len(self.years) - 2, 1)))
         return np.array([_t_quantile(0.5 + level / 2.0, max(int(d), 1))
@@ -292,41 +287,13 @@ def _design_rows(model: "ProfileModel") -> np.ndarray:
 
 
 def _t_quantile(p: float, dof: int) -> float:
-    """Two-sided Student's t quantile, without a scipy dependency."""
-    try:
-        from scipy.stats import t
-        return float(t.ppf(p, dof))
-    except ImportError:
-        pass
-    # Cornish-Fisher expansion on the normal quantile; better than 0.5% for
-    # dof >= 5, which is the regime the melt-season regressions sit in.
-    z = _normal_quantile(p)
-    g1 = (z ** 3 + z) / 4.0
-    g2 = (5 * z ** 5 + 16 * z ** 3 + 3 * z) / 96.0
-    g3 = (3 * z ** 7 + 19 * z ** 5 + 17 * z ** 3 - 15 * z) / 384.0
-    return z + g1 / dof + g2 / dof ** 2 + g3 / dof ** 3
+    """Two-sided Student's t quantile."""
+    return float(student_t.ppf(p, dof))
 
 
-def _normal_quantile(p: float) -> float:
-    """Inverse standard normal CDF (Acklam's rational approximation)."""
-    a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
-         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00]
-    b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
-         6.680131188771972e+01, -1.328068155288572e+01]
-    c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
-         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00]
-    d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
-         3.754408661907416e+00]
-    plow, phigh = 0.02425, 1 - 0.02425
-    if p < plow:
-        q = np.sqrt(-2 * np.log(p))
-        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
-    if p > phigh:
-        q = np.sqrt(-2 * np.log(1 - p))
-        return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
-    q = p - 0.5
-    r = q * q
-    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)
+def _step_starts(step_days: int) -> np.ndarray:
+    """Day of year at the start of each step of the melt season."""
+    return np.arange(MELT_START_DOY, MELT_END_DOY - step_days + 2, step_days)
 
 
 def _as_frame(predictors: Predictors) -> pd.DataFrame:
@@ -343,7 +310,7 @@ def step_matrix(discharge: pd.Series, step_days: int = 7) -> pd.DataFrame:
     day-of-year rather than calendar weeks so that every year lines up, which
     matters for fitting one regression per step across years.
     """
-    starts = np.arange(MELT_START_DOY, MELT_END_DOY - step_days + 2, step_days)
+    starts = _step_starts(step_days)
     doy = discharge.index.dayofyear
     year = discharge.index.year
     rows = {}
@@ -513,17 +480,10 @@ def compare(scenarios: dict[str, pd.DataFrame], step_days: int) -> pd.DataFrame:
 # Uncertainty propagation
 # --------------------------------------------------------------------------
 
-MEAN_SD_COLUMN = "__mean_sd__"
-
-
 def catchment_sd(sd_fields: pd.DataFrame, correlated: bool = True) -> pd.Series:
     """Spread of the catchment mean implied by the GRF posterior, per snapshot.
 
-    The module publishes this directly as `v_uncertainty_mean`, and `run_grf`
-    carries it through as a named column. Where that is present it is used - it
-    comes from the joint posterior, which is the correct basis.
-
-    Where it is absent, the node-wise spreads are collapsed instead. That is an
+    The node-wise spreads are collapsed. That is an
     approximation with two far-apart limits, because a fitted field is smooth
     and neighbouring nodes err together:
 
@@ -533,9 +493,6 @@ def catchment_sd(sd_fields: pd.DataFrame, correlated: bool = True) -> pd.Series:
     `correlated=True` takes the conservative one, which is the right default
     for a number that will be quoted.
     """
-    if MEAN_SD_COLUMN in sd_fields.columns:
-        return sd_fields[MEAN_SD_COLUMN].astype(float).rename("catchment_sd")
-
     values = sd_fields.to_numpy(dtype=float)
     if correlated:
         spread = np.nanmean(values, axis=1)
@@ -591,8 +548,7 @@ def multiplicative_factor(snapshot_sd: pd.Series) -> float:
 
 
 def propagate(model: "ProfileModel", value: Values, value_sd: float = 0.0,
-              draws: int = 2000, sigmas: float | None = None,
-              level: float = 0.68, seed: int = 0) -> pd.DataFrame:
+              draws: int = 2000, level: float = 0.68, seed: int = 0) -> pd.DataFrame:
     """Prediction band including harmonisation uncertainty, by Monte Carlo.
 
     Two sources, combined properly rather than added:
@@ -618,18 +574,11 @@ def propagate(model: "ProfileModel", value: Values, value_sd: float = 0.0,
     noise = rng.normal(0.0, 1.0, size=centres.shape) * spread[None, :]
     sampled = np.clip(centres + noise, 0.0, None)
 
-    lower = (50 * (1 - _coverage(sigmas)) if sigmas is not None
-             else 50 * (1 - level))
+    lower = 50 * (1 - level)
     return pd.DataFrame({"lower": np.percentile(sampled, lower, axis=0),
                          "predicted": sampled.mean(axis=0),
                          "upper": np.percentile(sampled, 100 - lower, axis=0)},
                         index=model.starts)
-
-
-def _coverage(sigmas: float) -> float:
-    """Two-sided normal coverage for a number of standard deviations."""
-    from math import erf, sqrt
-    return erf(sigmas / sqrt(2.0))
 
 
 def uncertainty_budget(model: "ProfileModel", value: Values, value_sd: float,
@@ -663,10 +612,6 @@ def monthly_flow(monthly_mm: pd.Series,
                      / (days * 86400.0), index=monthly_mm.index)
 
 
-def _step_starts(step_days: int) -> np.ndarray:
-    return np.arange(MELT_START_DOY, MELT_END_DOY - step_days + 2, step_days)
-
-
 def runoff_as_discharge(monthly_mm: pd.Series, discharge: pd.Series,
                         step_days: int = 7, lag_steps: int = 1,
                         area_m2: float = CATCHMENT_AREA_M2) -> pd.DataFrame:
@@ -696,67 +641,6 @@ def runoff_as_discharge(monthly_mm: pd.Series, discharge: pd.Series,
         season = flow[flow.index.year == year]
         by_month = {ts.month: value for ts, value in season.items()}
         predicted.loc[year] = [by_month.get(m, 0.0) for m in months]
-    return pd.concat({"observed": observed.loc[years], "predicted": predicted},
-                     axis=1)
-
-
-def season_shape_profiles(monthly_mm: pd.Series, discharge: pd.Series,
-                          step_days: int = 7, lags: tuple[int, ...] = (0, 1, 2, 3),
-                          area_m2: float = CATCHMENT_AREA_M2) -> pd.DataFrame:
-    """Use the shape of the climate model's season, not just its total.
-
-    `ProfileModel` gives every season the same shape, scaled by one number.
-    This instead interpolates the monthly runoff across the steps, shifts it by
-    a lag to allow for the time water takes to reach the gauge, and fits a
-    single straight line from that to measured discharge.
-
-    The lag and the line are both chosen inside each leave-one-year-out fold,
-    so the held-out year never informs its own prediction.
-
-    Returns the same observed/predicted frame as `leave_one_year_out`.
-    """
-    flow = monthly_flow(monthly_mm, area_m2)
-    observed = step_matrix(discharge, step_days)
-    starts = _step_starts(step_days)
-    middle = starts + step_days // 2
-    years = [y for y in observed.index if y in set(flow.index.year)]
-
-    def shape(year: int, lag: int) -> np.ndarray:
-        season = flow[flow.index.year == year]
-        if not len(season):
-            return np.full(len(starts), np.nan)
-        # zero at the shoulders so the interpolation ramps in and out
-        knots_x = [_doy(year, MELT_MONTHS[0] - 1)]
-        knots_y = [0.0]
-        for ts, value in season.items():
-            knots_x.append(_doy(year, ts.month))
-            knots_y.append(float(value))
-        knots_x.append(_doy(year, MELT_MONTHS[-1] + 1))
-        knots_y.append(0.0)
-        return np.interp(middle - step_days * lag, knots_x, knots_y)
-
-    shapes = {lag: np.array([shape(y, lag) for y in years]) for lag in lags}
-    truth = observed.loc[years].to_numpy(dtype=float)
-    predicted = pd.DataFrame(index=years, columns=observed.columns, dtype=float)
-
-    for i, year in enumerate(years):
-        others = np.arange(len(years)) != i
-        best = None
-        for lag, values in shapes.items():
-            x = values[others].ravel()
-            y = truth[others].ravel()
-            keep = np.isfinite(x) & np.isfinite(y)
-            if keep.sum() < 3:
-                continue
-            line = np.polyfit(x[keep], y[keep], 1)
-            error = np.sqrt(np.mean((np.polyval(line, x[keep]) - y[keep]) ** 2))
-            if best is None or error < best[0]:
-                best = (error, lag, line)
-        if best is None:
-            continue
-        _, lag, line = best
-        predicted.loc[year] = np.clip(np.polyval(line, shapes[lag][i]), 0.0, None)
-
     return pd.concat({"observed": observed.loc[years], "predicted": predicted},
                      axis=1)
 
@@ -1169,16 +1053,13 @@ class ShapeModel:
             [np.nanmean(self.prediction_se(int(y))) for y in self.years]))
         return here / centre if centre else 1.0
 
-    def _multiplier(self, sigmas: float | None, level: float) -> float:
-        if sigmas is not None:
-            level = math.erf(sigmas / math.sqrt(2.0))
+    def _multiplier(self, level: float) -> float:
         return _t_quantile(0.5 + level / 2.0, self.dof)
 
-    def band(self, values: Values, sigmas: float | None = None,
-             level: float = 0.68) -> pd.DataFrame:
+    def band(self, values: Values, level: float = 0.68) -> pd.DataFrame:
         """Prediction interval around one season, at one coverage."""
         centre = self.profile(values)
-        spread = pd.Series(self.prediction_se(values) * self._multiplier(sigmas, level),
+        spread = pd.Series(self.prediction_se(values) * self._multiplier(level),
                            index=self.starts)
         return pd.DataFrame({"predicted": centre,
                              "lower": (centre - spread).clip(lower=0),

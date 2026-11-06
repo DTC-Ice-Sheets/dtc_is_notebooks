@@ -21,6 +21,9 @@ import logging
 from collections.abc import Callable
 
 import dtc_query_client
+import numpy as np
+import pandas as pd
+import xarray as xr
 from dtc_query_client.api_client import ApiClient
 from dtc_query_client.helpers import wait_for_job
 from dtc_query_client.models.job_status import JobStatus
@@ -56,7 +59,7 @@ class JobFailedError(RuntimeError):
     """A submitted job finished in a state other than succeeded."""
 
 
-def open_store(path: str) -> "object":
+def open_store(path: str) -> xr.Dataset:
     """
     Open a GeoZarr the workflow wrote.
 
@@ -70,8 +73,6 @@ def open_store(path: str) -> "object":
     xarray.Dataset
         The store as written.
     """
-    import xarray as xr
-
     try:
         return xr.open_zarr(path, consolidated=True)
     except (KeyError, ValueError):
@@ -201,8 +202,8 @@ async def run_fts_job(api_client: ApiClient, data_path: str, curve_time_points: 
 
 async def download_dataset(api_client: ApiClient, dataset_id: str, start_date: str = "2006-01-01",
                            end_date: str = "2026-01-01",
-                           variables: "list[str] | None" = None,
-                           polygon: "dict | None" = None,
+                           variables: list[str] | None = None,
+                           polygon: dict | None = None,
                            progress: Progress = print) -> str:
     """
     Fetch one published dataset through the Query API's download endpoint.
@@ -249,7 +250,7 @@ async def download_dataset(api_client: ApiClient, dataset_id: str, start_date: s
 
 async def discharge_series(api_client: ApiClient, start_date: str = "2006-01-01", end_date: str = "2026-01-01",
                            measured_only: bool = False,
-                           progress: Progress = print) -> "object":
+                           progress: Progress = print) -> pd.Series:
     """
     Fetch the Watson gauge record as a daily series in cubic metres per second.
 
@@ -270,9 +271,6 @@ async def discharge_series(api_client: ApiClient, start_date: str = "2006-01-01"
     pandas.Series
         Discharge in m3 s-1, indexed by date, with gaps kept as NaN.
     """
-    import numpy as np
-    import pandas as pd
-
     name = f"measured_{DISCHARGE_VARIABLE}" if measured_only else DISCHARGE_VARIABLE
     path = await download_dataset(api_client, "UC1_WATSON_DISCHARGE_GAUGE", start_date, end_date,
                                   variables=[name], progress=progress)
@@ -286,7 +284,7 @@ async def discharge_series(api_client: ApiClient, start_date: str = "2006-01-01"
     return series
 
 
-def linear_scale(frame: "object", variable: str) -> "object":
+def linear_scale(frame: pd.DataFrame, variable: str) -> pd.DataFrame:
     """
     Undo the log10 the published collections are stored on, where they are.
 
@@ -307,7 +305,7 @@ def linear_scale(frame: "object", variable: str) -> "object":
 
 async def published_fields(api_client: ApiClient, dataset_id: str, start_date: str = "2006-01-01",
                            end_date: str = "2026-01-01",
-                           variable: "str | None" = None,
+                           variable: str | None = None,
                            progress: Progress = print) -> dict:
     """
     Fetch one published collection and read its field back as a table.
@@ -338,9 +336,6 @@ async def published_fields(api_client: ApiClient, dataset_id: str, start_date: s
     ValueError
         If the store holds no variable that varies in space and time.
     """
-    import numpy as np
-    import pandas as pd
-
     path = await download_dataset(api_client, dataset_id, start_date, end_date, progress=progress)
     progress("download: reading the field back")
     ds = open_store(path)
@@ -398,9 +393,6 @@ async def grf_fields(api_client: ApiClient, dataset_name: str, start_date: str =
         ``points`` an (n, 2) array of cell coordinates, and ``variable`` the
         name the module gave the field.
     """
-    import numpy as np
-    import pandas as pd
-
     path = await run_grf_job(api_client, dataset_name, start_date, end_date,
                              grid_res_x, grid_res_y, progress=progress)
     progress("GRF: reading the fitted field back")
@@ -485,9 +477,6 @@ async def fts_coefficients(api_client: ApiClient, data_path: str, curve_time_poi
         If the store holds nothing that can be read as coefficients. The
         message names what it does hold.
     """
-    import numpy as np
-    import pandas as pd
-
     path = await run_fts_job(api_client, data_path, curve_time_points, num_pca,
                              num_factors, forecast_horizon, progress=progress)
     progress("FTS: reading the coefficients back")

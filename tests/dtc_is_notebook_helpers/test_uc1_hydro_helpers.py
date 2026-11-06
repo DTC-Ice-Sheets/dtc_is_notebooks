@@ -385,30 +385,11 @@ def test_the_t_quantile_approaches_the_normal_one_as_dof_grows():
     assert uc1._t_quantile(0.975, 3) > near_normal
 
 
-def test_the_normal_quantile_is_symmetric():
-    assert abs(uc1._normal_quantile(0.5)) < 1e-9
-    assert uc1._normal_quantile(0.975) == pytest.approx(-uc1._normal_quantile(0.025), abs=1e-6)
-
-
 def test_monthly_flow_converts_millimetres_to_cubic_metres_a_second():
     index = pd.DatetimeIndex(["2014-07-01"])
     flow = uc1.monthly_flow(pd.Series([31.0], index=index), area_m2=86_400_000.0)
     # 31 mm over that area in 31 days works out at exactly 1 m3/s.
     np.testing.assert_allclose(flow.to_numpy(), [1.0])
-
-
-def test_season_shape_profiles_returns_an_observed_predicted_frame(discharge):
-    months = pd.date_range(f"{FIRST_YEAR}-05-01", f"{LAST_YEAR}-09-01", freq="MS")
-    months = months[months.month.isin(uc1.MELT_MONTHS)]
-    shape = np.exp(-((months.dayofyear.to_numpy() - PEAK_DOY) ** 2) / (2 * 40.0**2))
-    level = np.array([_levels()[stamp.year] for stamp in months])
-    monthly = pd.Series(120.0 * level * shape, index=months)
-
-    out = uc1.season_shape_profiles(monthly, discharge)
-
-    assert set(out.columns.get_level_values(0)) == {"observed", "predicted"}
-    assert len(out) > 0
-    assert uc1.profile_skill(out)["r2"] > 0.5
 
 
 def test_catchment_mean_ignores_columns_with_no_weight():
