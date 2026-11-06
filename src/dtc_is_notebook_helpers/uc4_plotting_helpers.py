@@ -1,9 +1,10 @@
 """
 Exploration visuals for the DTC super-resolution SMB emulator (single location mode).
 
-Everything here works from ONE input: the dataset written by `run_postprocessing_loc`
-(the "rcm-emulator" output of the API job). No local ERA5/RACMO re-download or
-re-projection is needed.
+Everything here works from one input: the dataset written by `run_postprocessing_loc`
+(the "rcm-emulator" output of the API job). 
+The code can be found here: 
+https://github.com/DTC-Ice-Sheets/dtc_super_resolution/blob/main/src/dtc_super_resolution/rcm_emulator_loc_entrypoint.py
 """
 
 from __future__ import annotations
@@ -30,9 +31,11 @@ CONTEXT_PAD_W = 8  # columns, left and right
 
 REF_COLOR = "#0072b2"  # RACMO
 EMU_COLOR = "#d55e00"  # emulator
-SMB_CMAP = "RdBu"  # blue = net accumulation, red = net loss (same as the dashboard)
-ERA5_UNITS = {"tp": "m", "t2m": "K", "d2m": "K", "sst": "K", "sp": "Pa", "msl": "Pa", "u10": "m/s", "v10": "m/s"}
-SMB_UNITS = "kg m$^{-2}$"  # check against your product; the dashboard labels some SMB layers mm w.e.
+SMB_CMAP = "coolwarm"  # blue = net accumulation, red = net loss (same as the dashboard)
+
+# all the ERA5 channels are standardised per tile
+ERA5_UNITS = {"d2m": "K", "msl": "Pa","sp": "Pa",  "sst": "K", "t2m": "K", "tp": "m", "u10": "m/s", "v10": "m/s"}
+SMB_UNITS = "mm w.e. yr-1"  
 
 
 # ============================================================================
@@ -201,25 +204,6 @@ def _extent(x, y, pad_cells=(0, 0)) -> tuple[float, float, float, float]:  # noq
     dx, dy = np.abs(np.diff(x)).mean(), np.abs(np.diff(y)).mean()
     px, py = pad_cells[0] * dx, pad_cells[1] * dy
     return x.min() - dx / 2 - px, x.max() + dx / 2 + px, y.min() - dy / 2 - py, y.max() + dy / 2 + py
-
-
-def _smb_norm(*arrays: np.ndarray) -> TwoSlopeNorm:
-    """
-    Colour norm shared by RACMO and emulator, with white at zero (the gain/loss divide).
-
-    Parameters
-    ----------
-    *arrays : np.ndarray
-        The SMB fields the norm is computed from.
-
-    Returns
-    -------
-    TwoSlopeNorm
-        The colour norm.
-    """
-    vals = np.concatenate([a[np.isfinite(a)].ravel() for a in arrays])
-    lo, hi = np.nanpercentile(vals, [1, 99])
-    return TwoSlopeNorm(vmin=min(lo, -1e-6), vcenter=0.0, vmax=max(hi, 1e-6))
 
 
 def era5_label(channel: str) -> str:
@@ -449,13 +433,16 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (date_min <= np.datetime64(selected_date) <= date_max):
+    if not (date_min <= np.datetime64(selected_date, 'M') <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
     # select the nearest date in the dataset to the provided date
-    era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=selected_date, method="nearest").values
-    predictions = out_ds["predictions"].sel(time=selected_date, method="nearest").values
-    target = out_ds["target_patches"].sel(time_r=selected_date, method="nearest").values
+    era5 = out_ds["x_cropped"].sel(channels="tp").sel(time=np.datetime64(selected_date, 'M'), method="nearest").values
+    predictions = out_ds["predictions"].sel(time=np.datetime64(selected_date, 'M'), method="nearest").values
+    target = reference_on_prediction_time(out_ds).sel(time_r=predictions.time).values
+
+    if not np.isfinite(target).any():
+        print("No RACMO reference is available for the selected prediction month.")
 
     fig1, ax = plt.subplots(1, 4, figsize=(12, 5), subplot_kw={"projection": POLAR})
 
@@ -476,7 +463,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     im1 = ax[1].pcolormesh(out_ds.x.values,
                             out_ds.y.values,
                             np.squeeze(target),
-                            cmap="coolwarm",
+                            cmap=SMB_CMAP,
                             transform=POLAR,
                             vmin=vmin, vmax=vmax)
     ax[1].set_title("RACMO reference \n[kg m-2]", fontsize=14)
@@ -488,7 +475,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     im2 = ax[2].pcolormesh(out_ds.x.values,
                         out_ds.y.values,
                         predictions,
-                        cmap="coolwarm",
+                        cmap=SMB_CMAP,
                         transform=POLAR,
                         vmin=vmin, vmax=vmax)
     ax[2].set_title("Predicted SMB \n[kg m-2]", fontsize=14)
@@ -528,7 +515,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
     for im, axis in ((im0, ax[0]), (im1, ax[1]), (im2, ax[2])):
         fig1.colorbar(im, ax=axis, orientation="horizontal", pad=0.05, shrink=0.9)
 
-    when = pd.Timestamp(out_ds["time"].sel(time=selected_date, method="nearest").values).strftime("%Y-%m")
+    when = pd.Timestamp(out_ds["time"].sel(time=np.datetime64(selected_date, 'M'), method="nearest").values).strftime("%Y-%m")
     fig1.suptitle(f"Glaciated SMB emulator - Antarctica - {when}", fontsize=18)
     plt.tight_layout()
     plt.close()
@@ -566,10 +553,10 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     # check if the date within the dataset range
     date_min = out_ds.isel(time=0).time.values
     date_max = out_ds.isel(time=-1).time.values
-    if not (date_min <= np.datetime64(selected_date) <= date_max):
+    if not (date_min <= np.datetime64(selected_date, 'M') <= date_max):
         raise ValueError(f"Date {selected_date} is not in the dataset. Available dates: {out_ds['time'].values}")
 
-    prediction = out_ds["predictions"].sel(time=selected_date, method="nearest")
+    prediction = out_ds["predictions"].sel(time=np.datetime64(selected_date, 'M'), method="nearest")
     predictions = prediction.values
     target = reference_on_prediction_time(out_ds).sel(time=prediction.time).values
     if not np.isfinite(target).any():
@@ -679,7 +666,7 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
     )
     ax[2].set_title("Predicted vs Target SMB Distribution", fontsize=14)
 
-    when = pd.Timestamp(out_ds["time"].sel(time=selected_date, method="nearest").values).strftime("%Y-%m")
+    when = pd.Timestamp(out_ds["time"].sel(time=np.datetime64(selected_date, 'M'), method="nearest").values).strftime("%Y-%m")
     fig2.suptitle(f"Validation - {when}", fontsize=18)
     fig2.tight_layout()
     plt.close()
