@@ -664,7 +664,7 @@ def plot_validation(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.F
         manage_ticks=False,
         showfliers=False,
     )
-    ax[2].set_title("Predicted vs Target SMB Distribution", fontsize=14)
+    ax[2].set_title(f"Predicted vs Target SMB Distribution [{SMB_UNITS}]", fontsize=14)
 
     when = pd.Timestamp(out_ds["time"].sel(time=np.datetime64(selected_date, 'M'), method="nearest").values).strftime("%Y-%m")
     fig2.suptitle(f"Validation - {when}", fontsize=18)
