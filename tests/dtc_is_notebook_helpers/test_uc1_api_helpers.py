@@ -101,7 +101,7 @@ def test_run_job_submits_and_waits_through_the_given_client(monkeypatch, mock_ap
 
     setattr(FakeApi, method, FakeApi._submit)
 
-    async def fake_await(api_client, job_id, key, what):     # noqa: ARG001
+    async def fake_await(api_client, job_id, key, what, **kwargs):  # noqa: ARG001, ANN003
         seen["awaited_with"], seen["job_id"], seen["key"] = api_client, job_id, key
         return "out.zarr"
 
@@ -121,25 +121,59 @@ def test_run_job_submits_and_waits_through_the_given_client(monkeypatch, mock_ap
 def test_a_succeeded_job_gives_back_its_output_path(monkeypatch, mock_api_client):
     finished = SimpleNamespace(
         status=api.JobStatus.SUCCEEDED,
+        log_events=SimpleNamespace(infos=["fitted 100 timesteps"], warnings=[]),
         outputs={"grf-module": {"output_path": "somewhere.zarr"}})
 
-    async def fake_wait(client, job_id, **kwargs):      # noqa: ANN001, ARG001, ANN003
-        return finished
+    async def fake_iterate(client, job_id, **kwargs):   # noqa: ANN001, ARG001, ANN003
+        yield finished
 
-    monkeypatch.setattr(api, "wait_for_job", fake_wait)
-    path = asyncio.run(api._await_job(mock_api_client, "job-1", "grf-module", "GRF"))
+    monkeypatch.setattr(api, "iterate_job", fake_iterate)
+    said = []
+    path = asyncio.run(api._await_job(mock_api_client, "job-1", "grf-module", "GRF",
+                                      progress=said.append))
     assert path == "somewhere.zarr"
+    # The module's own log lines are reported rather than discarded, so a long
+    # job says how far it has got.
+    assert said == ["GRF: fitted 100 timesteps"]
 
 
 def test_a_job_that_did_not_succeed_is_raised_not_returned(monkeypatch, mock_api_client):
-    finished = SimpleNamespace(status="FAILED", outputs={})
+    finished = SimpleNamespace(status="FAILED", log_events=None, outputs={})
 
-    async def fake_wait(client, job_id, **kwargs):      # noqa: ANN001, ARG001, ANN003
-        return finished
+    async def fake_iterate(client, job_id, **kwargs):   # noqa: ANN001, ARG001, ANN003
+        yield finished
 
-    monkeypatch.setattr(api, "wait_for_job", fake_wait)
+    monkeypatch.setattr(api, "iterate_job", fake_iterate)
     with pytest.raises(api.JobFailedError, match="FAILED"):
-        asyncio.run(api._await_job(mock_api_client, "job-1", "grf-module", "GRF"))
+        asyncio.run(api._await_job(mock_api_client, "job-1", "grf-module", "GRF",
+                                   progress=lambda _: None))
+
+
+def test_each_log_line_is_reported_once_as_the_job_goes_on(monkeypatch, mock_api_client):
+    # The same lines come back on every poll, with new ones appended, so a
+    # report of them all on each poll would repeat itself endlessly.
+    polls = [
+        SimpleNamespace(status="RUNNING", outputs={},
+                        log_events=SimpleNamespace(infos=["month 1"], warnings=[])),
+        SimpleNamespace(status="RUNNING", outputs={},
+                        log_events=SimpleNamespace(infos=["month 1", "month 2"],
+                                                   warnings=["timestep 3 was flat"])),
+        SimpleNamespace(status=api.JobStatus.SUCCEEDED,
+                        log_events=SimpleNamespace(infos=["month 1", "month 2"],
+                                                   warnings=["timestep 3 was flat"]),
+                        outputs={"grf-module": {"output_path": "somewhere.zarr"}}),
+    ]
+
+    async def fake_iterate(client, job_id, **kwargs):   # noqa: ANN001, ARG001, ANN003
+        for poll in polls:
+            yield poll
+
+    monkeypatch.setattr(api, "iterate_job", fake_iterate)
+    said = []
+    asyncio.run(api._await_job(mock_api_client, "job-1", "grf-module", "GRF",
+                               progress=said.append))
+    assert said == ["GRF: month 1", "GRF: month 2",
+                    "GRF: warning: timestep 3 was flat"]
 
 
 # --------------------------------------------------------------------------

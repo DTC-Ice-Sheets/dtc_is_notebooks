@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from dtc_query_client.api_client import ApiClient
-from dtc_query_client.helpers import wait_for_job
+from dtc_query_client.helpers import iterate_job
 from dtc_query_client.models.job_status import JobStatus
 
 logger = logging.getLogger(__name__)
@@ -83,9 +83,14 @@ def open_store(path: str) -> xr.Dataset:
 
 
 async def _await_job(api_client: ApiClient, job_id: str, output_key: str,
-                     what: str) -> str:
+                     what: str, progress: Progress = print) -> str:
     """
     Wait for one submitted job and return the path of what it wrote.
+
+    The module's own log lines come back with every status poll, and are
+    reported as they arrive. A long job then says how far it has got rather
+    than sitting silent, which is the difference between knowing it is working
+    and knowing only that it has not finished.
 
     Parameters
     ----------
@@ -97,6 +102,8 @@ async def _await_job(api_client: ApiClient, job_id: str, output_key: str,
         Key the module's output path sits under.
     what : str
         Name used in log messages and errors.
+    progress : callable, optional
+        Called with each new line the module logs.
 
     Returns
     -------
@@ -108,9 +115,18 @@ async def _await_job(api_client: ApiClient, job_id: str, output_key: str,
     JobFailedError
         If the job finished in any state other than succeeded.
     """
-    result = await wait_for_job(
+    result, seen = None, {"infos": 0, "warnings": 0}
+    async for result in iterate_job(
         api_client, job_id, max_job_missing_delay=MAX_JOB_MISSING_DELAY,
-    )
+    ):
+        events = result.log_events
+        for kind, prefix in (("infos", ""), ("warnings", "warning: ")):
+            lines = list(getattr(events, kind, None) or []) if events else []
+            for line in lines[seen[kind]:]:
+                progress(f"{what}: {prefix}{line}")
+            seen[kind] = max(seen[kind], len(lines))
+    if result is None:
+        raise JobFailedError(f"the {what} job never reported a status")
     if result.status != JobStatus.SUCCEEDED:
         raise JobFailedError(f"the {what} job finished as {result.status}, not SUCCEEDED")
     path = result.outputs[output_key]["output_path"]
@@ -153,7 +169,8 @@ async def run_grf_job(api_client: ApiClient, dataset_name: str, start_date: str 
     progress(f"GRF: submitting {dataset_name} ...")
     submitted = await api.submit_grf_job(request)
     progress(f"GRF: job {submitted.job_id}, waiting (a cached run returns in seconds)")
-    path = await _await_job(api_client, submitted.job_id, GRF_OUTPUT_KEY, "GRF")
+    path = await _await_job(api_client, submitted.job_id, GRF_OUTPUT_KEY, "GRF",
+                            progress=progress)
     progress("GRF: done")
     return path
 
@@ -191,7 +208,8 @@ async def run_fts_job(api_client: ApiClient, data_path: str, curve_time_points: 
     progress("FTS: submitting ...")
     submitted = await api.submit_fts_job(request)
     progress(f"FTS: job {submitted.job_id}, waiting")
-    path = await _await_job(api_client, submitted.job_id, FTS_OUTPUT_KEY, "FTS")
+    path = await _await_job(api_client, submitted.job_id, FTS_OUTPUT_KEY, "FTS",
+                            progress=progress)
     progress("FTS: done")
     return path
 
@@ -239,7 +257,7 @@ async def download_dataset(api_client: ApiClient, dataset_id: str, start_date: s
     submitted = await api.download_data(request)
     progress(f"download: job {submitted.job_id}, waiting")
     path = await _await_job(api_client, submitted.job_id,
-                            DOWNLOAD_OUTPUT_KEY, "download")
+                            DOWNLOAD_OUTPUT_KEY, "download", progress=progress)
     progress("download: done")
     return path
 
