@@ -709,8 +709,8 @@ def seasonal_sd(snapshot_sd: pd.Series, years: Years, monthly_values: pd.Series 
     summed. Months are drawn independently, which is right: each is a separate
     INLA fit on separate observations.
 
-    Pass `log10=False` for a predictor already in linear units, and the months
-    combine in quadrature as before.
+    Pass `log10=False` for a predictor already in linear units, in which case
+    the months combine in quadrature instead.
 
     Parameters
     ----------
@@ -913,7 +913,7 @@ def runoff_as_discharge(monthly_mm: pd.Series, discharge: pd.Series,
     """
     Apply the naive baseline: every millimetre of runoff reaches the gauge.
 
-    No fitting, no gauge record used — each step simply takes the flow of the
+    No fitting, no gauge record used - each step simply takes the flow of the
     month it falls in. This is what the use case is worth measuring against,
     because it is what you would do with the climate model alone.
 
