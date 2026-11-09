@@ -4,9 +4,8 @@ Use Case 1 - Hydropower. The machinery behind the demonstrator notebook.
 A melt season is described by a single number, and discharge is predicted in
 each sub-period of that season separately: one regression per week, twenty-two
 of them, each fitted across years. The seasonal number sets how big the year
-is; the per-week regressions set its shape. The approach is the one David
-Parkes established for this use case, over twenty melt seasons here, with the
-step length and the choice of predictor both set at run time.
+is; the per-week regressions set its shape. Twenty melt seasons are fitted
+here, with the step length and the choice of predictor both set at run time.
 
 Everything is indexed by date and returns pandas objects, so any one step can
 be replaced without disturbing those either side of it.
