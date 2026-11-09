@@ -278,6 +278,16 @@ def test_season_shape_is_zero_outside_the_melt_season(discharge, monthly):
     assert curve.min() >= 0.0
 
 
+def test_a_season_missing_a_melt_month_has_no_curve(discharge, monthly):
+    flow = uc1.monthly_flow(monthly)
+    truncated = flow[~((flow.index.year == FIRST_YEAR) & (flow.index.month == 9))]
+    assert np.isnan(uc1.season_shape(truncated, FIRST_YEAR, 7, 0)).all()
+    # Only that season. Interpolating the gap would have kept it here while
+    # seasonal_predictor dropped it, and the two models would then disagree on
+    # which seasons they were fitted on.
+    assert np.isfinite(uc1.season_shape(truncated, FIRST_YEAR + 1, 7, 0)).all()
+
+
 def test_a_dropped_snapshot_does_not_shift_the_later_seasons_runoff(monthly):
     # The notebook drops snapshots with no reported spread before calling this,
     # so pairing the two by position would hand every month after the gap the

@@ -1090,7 +1090,13 @@ def season_shape(flow: pd.Series, year: int, step_days: int, lag: int) -> np.nda
     starts = _step_starts(step_days)
     middle = starts + step_days // 2
     season = flow[flow.index.year == year]
-    if not len(season):
+    season = season[season.index.month.isin(MELT_MONTHS)].sort_index()
+    # Every melt month has to be there. Interpolating across a missing one
+    # invents it from the shoulder knot, and the season would then be kept here
+    # while `seasonal_predictor` drops it. Sorted, because np.interp needs it.
+    present = {int(m) for m in season.index.month}
+    if (set(MELT_MONTHS) - present
+            or not np.isfinite(season.to_numpy(dtype=float)).all()):
         return np.full(len(starts), np.nan)
     # zero at the shoulders so the interpolation ramps in and out
     knots_x = [_doy(year, MELT_MONTHS[0] - 1)]
