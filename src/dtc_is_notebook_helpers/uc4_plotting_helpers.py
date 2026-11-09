@@ -34,7 +34,7 @@ SMB_CMAP = "RdBu"  # blue = net accumulation, red = net loss (same as the dashbo
 
 # all the ERA5 channels are standardised per tile
 ERA5_UNITS = {"d2m": "K", "msl": "Pa", "sp": "Pa", "sst": "K", "t2m": "K", "tp": "m", "u10": "m/s", "v10": "m/s"}
-SMB_UNITS = "mm w.e. yr-1"
+SMB_UNITS = "kg m-2 mo-1"  # kg m-2 per month, as in the dashboard
 
 
 # ============================================================================
@@ -275,7 +275,7 @@ def build_explorer(
     era5_channel : str, optional
         The ERA5 channel to show in the first map. Default is "tp" (total precipitation).
     units : str, optional
-        The units for the SMB maps and time series. Default is "kg m$^{-2}$".
+        The units for the SMB maps and time series. Default is "kg m-2 mo-1".
     height : int, optional
         The height of the figure in pixels. Default is 780.
 
@@ -482,7 +482,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
                         era5,
                         cmap="viridis",
                         transform=POLAR)
-    ax[0].set_title("ERA5 T.Precipitation \nnorm[mm/day]", fontsize=14)
+    ax[0].set_title(era5_label("tp"), fontsize=14)
     ax[0].coastlines("50m", linewidth=0.5)
     ax[0].set_extent([out_ds.x_era5.values.min(), out_ds.x_era5.values.max(),
                     out_ds.y_era5.values.min(), out_ds.y_era5.values.max()],
@@ -494,7 +494,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
                             cmap="coolwarm",
                             transform=POLAR,
                             vmin=vmin, vmax=vmax)
-    ax[1].set_title("RACMO reference \n[kg m-2]", fontsize=14)
+    ax[1].set_title(f"RACMO reference \n{SMB_UNITS}", fontsize=14)
     if not has_target:
         ax[1].text(0.5, 0.5, "No RACMO reference\nfor this month", transform=ax[1].transAxes, ha="center", va="center")
     ax[1].coastlines("50m", linewidth=0.5)
@@ -508,7 +508,7 @@ def plot_single_date(out_ds: xr.Dataset, selected_date: datetime) -> mpl.figure.
                         cmap="coolwarm",
                         transform=POLAR,
                         vmin=vmin, vmax=vmax)
-    ax[2].set_title("Predicted SMB \n[kg m-2]", fontsize=14)
+    ax[2].set_title(f"Predicted SMB \n{SMB_UNITS}", fontsize=14)
     ax[2].coastlines("50m", linewidth=0.5)
     ax[2].set_extent([out_ds.x.values.min(), out_ds.x.values.max(),
                     out_ds.y.values.min(), out_ds.y.values.max()],
