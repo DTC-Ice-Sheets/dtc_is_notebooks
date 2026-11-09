@@ -749,12 +749,21 @@ def seasonal_sd(snapshot_sd: pd.Series, years: Years, monthly_values: pd.Series 
         grouped = frame.groupby(level=0)["sd"]
         return np.sqrt(grouped.apply(lambda s: (s ** 2).sum())).rename("seasonal_sd")
 
-    frame["value"] = np.asarray(monthly_values, dtype=float)[:len(frame)]
+    # Align on the snapshot index rather than by position. The caller drops
+    # snapshots with no reported spread, so a positional pairing would hand a
+    # month's spread the next month's runoff from the first gap onwards.
+    frame["value"] = (monthly_values.reindex(snapshot_sd.index).to_numpy(dtype=float)
+                      if isinstance(monthly_values, pd.Series)
+                      else np.asarray(monthly_values, dtype=float)[:len(frame)])
     rng = np.random.default_rng(seed)
     spread = {}
     for year, block in frame.groupby(level=0):
         base = block["value"].to_numpy()
         sigma = block["sd"].to_numpy()
+        paired = np.isfinite(base) & np.isfinite(sigma)
+        base, sigma = base[paired], sigma[paired]
+        if not len(base):
+            continue
         offsets = rng.normal(0.0, 1.0, size=(draws, len(base))) * sigma[None, :]
         totals = (base[None, :] * np.power(10.0, offsets)).sum(axis=1)
         spread[year] = float(totals.std())

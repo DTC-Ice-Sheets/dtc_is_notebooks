@@ -278,6 +278,22 @@ def test_season_shape_is_zero_outside_the_melt_season(discharge, monthly):
     assert curve.min() >= 0.0
 
 
+def test_a_dropped_snapshot_does_not_shift_the_later_seasons_runoff(monthly):
+    # The notebook drops snapshots with no reported spread before calling this,
+    # so pairing the two by position would hand every month after the gap the
+    # next month's runoff.
+    spreads = pd.Series(np.full(len(monthly), 0.02), index=monthly.index)
+    years = [stamp.year for stamp in spreads.index]
+    whole = uc1.seasonal_sd(spreads, years, monthly_values=monthly, draws=50_000)
+
+    gapped = spreads.drop(spreads.index[2])
+    after_gap = uc1.seasonal_sd(gapped, [s.year for s in gapped.index],
+                                monthly_values=monthly, draws=50_000)
+
+    last = max(whole.index)
+    assert abs(after_gap[last] - whole[last]) / whole[last] < 0.02
+
+
 def test_model_str_names_the_predictor(model):
     assert "ProfileModel" in str(model)
     assert "catchment sum" in str(model)
