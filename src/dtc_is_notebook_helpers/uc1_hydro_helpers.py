@@ -1,21 +1,12 @@
 """
 Use Case 1 - Hydropower. The machinery behind the demonstrator notebook.
 
-The method follows David Parkes' original demonstrator: a single number
-describing a melt season is used to predict discharge in each sub-period of
-that season separately. One regression per week, twenty-two of them, each
-across years. The seasonal number sets how big the year is; the per-week
-regressions set the shape.
-
-What has changed from the original
-----------------------------------
-* twenty seasons of training data rather than eight
-* the step length is a parameter, so weekly, fortnightly or daily all work
-* annual totals and peak flows come out of the same profile
-* the predictor can be the FTS coefficient or the plain catchment total,
-  chosen at run time, so the two can be compared on the same footing
-* future scenarios can be driven by extracted 2050 projections rather than
-  only by perturbing the observed record
+A melt season is described by a single number, and discharge is predicted in
+each sub-period of that season separately: one regression per week, twenty-two
+of them, each fitted across years. The seasonal number sets how big the year
+is; the per-week regressions set its shape. The approach is the one David
+Parkes established for this use case, over twenty melt seasons here, with the
+step length and the choice of predictor both set at run time.
 
 Everything is indexed by date and returns pandas objects, so any one step can
 be replaced without disturbing those either side of it.
