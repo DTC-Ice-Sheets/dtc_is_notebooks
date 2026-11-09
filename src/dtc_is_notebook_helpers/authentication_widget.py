@@ -207,7 +207,7 @@ class ApiTokenWidget(widgets.VBox):
             token = getpass.getpass(VSCODE_PROMPT).strip()
             if not token:
                 self.status.stop("No API token entered, please rerun this cell.")
-                return
+                raise KeyboardInterrupt("API token entry cancelled.")
             self.submit(token)
             if self._check_task is not None:
                 await self._check_task
