@@ -1232,7 +1232,8 @@ class ShapeModel:
                         residuals, beta[2:])
 
         rmse, lag, slope, intercept, x, y, residuals, extra_beta = best
-        dof = max(len(x) - 2, 1)
+        # Intercept, slope, and one more for each extra predictor fitted.
+        dof = max(len(x) - 2 - len(extra_beta), 1)
         denominator = float(((y - y.mean()) ** 2).sum())
         # The scatter is not constant - a week predicted at 1500 m3/s misses by
         # far more than a week predicted at 50. A single pooled sd would be too
@@ -1346,6 +1347,10 @@ class ShapeModel:
         Simple-regression prediction error: the residual scatter, widened by
         the uncertainty of the fitted line and by how far the runoff value sits
         from the mean of the values it was fitted on.
+
+        The leverage term is on the curve alone. With extra predictors fitted
+        it therefore leaves out their own uncertainty and their covariance with
+        the curve, so the band can be a little narrow for an unusual lake year.
 
         Parameters
         ----------

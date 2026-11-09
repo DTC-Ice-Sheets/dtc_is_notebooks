@@ -278,6 +278,15 @@ def test_season_shape_is_zero_outside_the_melt_season(discharge, monthly):
     assert curve.min() >= 0.0
 
 
+def test_an_extra_predictor_costs_a_degree_of_freedom(discharge, monthly):
+    plain = uc1.ShapeModel.fit(discharge, monthly)
+    extras = pd.DataFrame(
+        {"lake": np.linspace(0.0, 1.0, LAST_YEAR - FIRST_YEAR + 1)},
+        index=range(FIRST_YEAR, LAST_YEAR + 1))
+    with_lakes = uc1.ShapeModel.fit(discharge, monthly, extras=extras)
+    assert with_lakes.dof == plain.dof - 1
+
+
 def test_a_season_missing_a_melt_month_has_no_curve(discharge, monthly):
     flow = uc1.monthly_flow(monthly)
     truncated = flow[~((flow.index.year == FIRST_YEAR) & (flow.index.month == 9))]
