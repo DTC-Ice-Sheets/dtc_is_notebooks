@@ -838,7 +838,12 @@ def propagate(model: "ProfileModel", value: Values, value_sd: float = 0.0,
     # prediction_se, not residual_sd: includes the uncertainty of the fitted
     # line and widens where the predictor sits away from the fitted range.
     spread = model.prediction_se(row)
-    noise = rng.normal(0.0, 1.0, size=centres.shape) * spread[None, :]
+    # t, not normal: band() uses the t quantile with the fitted degrees of
+    # freedom, and the two should describe the same distribution.
+    dof = (model.dof if model.dof is not None
+           else np.full(len(model.starts), max(len(model.years) - 2, 1)))
+    dof = np.where(np.isfinite(dof), np.maximum(dof, 1.0), 1.0)
+    noise = rng.standard_t(dof, size=centres.shape) * spread[None, :]
     sampled = np.clip(centres + noise, 0.0, None)
 
     lower = 50 * (1 - level)
