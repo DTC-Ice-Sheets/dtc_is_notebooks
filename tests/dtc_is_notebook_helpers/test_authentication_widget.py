@@ -12,6 +12,12 @@ from dtc_is_notebook_helpers import authentication_widget
 VALID_CREDENTIAL = "test-token"
 
 
+@pytest.fixture(autouse=True)
+def not_in_vscode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Show the regular widget, even when the tests run from a VS Code terminal."""
+    monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: False)
+
+
 def _client() -> ApiClient:
     return ApiClient(Configuration(host=authentication_widget.API_HOST, access_token=VALID_CREDENTIAL))
 
@@ -309,3 +315,53 @@ def test_wait_until_authenticated_awaits_event_without_kernel(monkeypatch: pytes
         await waiting
 
     asyncio.run(authenticate_after_wait_starts())
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [({"VSCODE_CWD": "/home"}, True), ({"VSCODE_PID": "1", "HOME": "/home"}, True), ({"HOME": "/home"}, False)],
+)
+def test_running_in_vscode(monkeypatch: pytest.MonkeyPatch, environ: dict[str, str], expected: bool):
+    monkeypatch.undo()
+    monkeypatch.setattr(authentication_widget.os, "environ", environ)
+
+    assert authentication_widget.running_in_vscode() is expected
+
+
+def test_vscode_widget_hides_token_input(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: True)
+
+    widget = authentication_widget.ApiTokenWidget()
+
+    input_row = widget.children[0]
+    assert list(input_row.children) == [widget.label]
+    assert widget.label.value == authentication_widget.VSCODE_LABEL_HTML
+    assert widget.children[1] is widget.status
+
+
+@pytest.mark.parametrize(
+    ("prompted_tokens", "status_codes", "authenticated"),
+    [
+        ([VALID_CREDENTIAL], [200], True),
+        (["bad-token", VALID_CREDENTIAL], [401, 200], True),
+        (["  "], [], False),
+        (["bad-token", ""], [401], False),
+    ],
+)
+def test_vscode_wait_prompts_until_authenticated_or_cancelled(
+    monkeypatch: pytest.MonkeyPatch, prompted_tokens: list[str], status_codes: list[int], authenticated: bool
+):
+    monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: True)
+    prompt = MagicMock(side_effect=prompted_tokens)
+    monkeypatch.setattr(authentication_widget.getpass, "getpass", prompt)
+    check_api_token = AsyncMock(side_effect=[_response(code) for code in status_codes])
+    monkeypatch.setattr(authentication_widget, "check_api_token", check_api_token)
+    monkeypatch.setattr(authentication_widget.os, "environ", {})
+
+    widget = authentication_widget.ApiTokenWidget()
+    asyncio.run(widget.wait_until_authenticated())
+
+    assert prompt.call_count == len(prompted_tokens)
+    assert check_api_token.await_count == len(status_codes)
+    assert widget.is_authenticated is authenticated
+    assert widget.token == (VALID_CREDENTIAL if authenticated else None)
