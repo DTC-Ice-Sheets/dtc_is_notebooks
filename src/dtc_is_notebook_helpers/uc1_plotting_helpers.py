@@ -836,7 +836,7 @@ def plot_baseline_errors(baselines: dict[str, pd.DataFrame]) -> Figure:
                                  baselines.items(), strict=False):
         error = ((v["predicted"] - v["observed"]) ** 2).mean(axis=1) ** 0.5
         ax.plot(error.index, error.values, color=colour, lw=2, marker="o", ms=5,
-                label=f"{name} — {uc1.profile_skill(v)['rmse_m3s']:.0f} m$^3$/s overall")
+                label=f"{name} - {uc1.profile_skill(v)['rmse_m3s']:.0f} m$^3$/s overall")
     first = next(iter(baselines.values()))
     ax.set_xticks(list(first["observed"].index)[::2])
     ax.set_ylabel("weekly error against the gauge (m$^3$/s)")
