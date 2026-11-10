@@ -44,6 +44,7 @@ import functools
 import html
 import sys
 import threading
+import time
 from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from typing import Any, ParamSpec, TextIO, TypeVar
@@ -77,11 +78,13 @@ _CSS = (
     "border:2px solid var(--jp-border-color2,#e0e0e0);border-top-color:var(--jp-brand-color1,#1976d2);"
     "animation:nb-spinner-rotate .8s linear infinite}"
     "@keyframes nb-spinner-rotate{to{transform:rotate(360deg)}}"
+    ".nb-spinner--delayed{opacity:0;animation:nb-spinner-show 0s forwards}"
+    "@keyframes nb-spinner-show{to{opacity:1}}"
     "</style>"
 )
 
 
-def spinner_html(message: str = DEFAULT_MESSAGE) -> str:
+def spinner_html(message: str = DEFAULT_MESSAGE, delay_s: float = 0.0) -> str:
     """
     Return the HTML for an animated spinner followed by a message.
 
@@ -89,14 +92,21 @@ def spinner_html(message: str = DEFAULT_MESSAGE) -> str:
     ----------
     message : str
         Text shown next to the spinner.
+    delay_s : float
+        Seconds before the spinner becomes visible; it is hidden by CSS until then.
 
     Returns
     -------
     str
         Self-contained HTML snippet.
     """
+    spinner_div = (
+        f'<div class="nb-spinner nb-spinner--delayed" style="animation-delay:{delay_s:g}s">'
+        if delay_s > 0
+        else '<div class="nb-spinner">'
+    )
     return (
-        f'{_CSS}<div class="nb-spinner"><div class="nb-spinner__ring"></div>'
+        f'{_CSS}{spinner_div}<div class="nb-spinner__ring"></div>'
         f'<span style="color:var(--jp-ui-font-color1,CanvasText)">{html.escape(message)}</span></div>'
     )
 
@@ -116,8 +126,12 @@ def _output_widget_capturing() -> bool:
 class _CellSpinner:
     """Keep a spinner at the bottom of the output of the currently running cell."""
 
-    def __init__(self, shell: InteractiveShell, message: str = DEFAULT_MESSAGE) -> None:
+    def __init__(self, shell: InteractiveShell, message: str = DEFAULT_MESSAGE, threaded: bool = True) -> None:
         self.shell = shell
+        # Colab runs later cells early when a background thread displays output, so there the spinner is shown
+        # and moved from the hooks themselves, with CSS (instead of a timer) delaying its first appearance.
+        self.threaded = threaded
+        self._last_move = 0.0
         self.default_message = message
         self.message = message
         self._lock = threading.RLock()
@@ -244,6 +258,11 @@ class _CellSpinner:
 
     # -- spinner management -------------------------------------------------------------------------
     def _schedule_move(self, delay: float) -> None:
+        if not self.threaded:
+            # Without a timer, move straight away, but at most once per MOVE_DEBOUNCE_S while visible.
+            if self._handle is None or time.monotonic() - self._last_move >= MOVE_DEBOUNCE_S:
+                self._move()
+            return
         if self._timer is not None:
             self._timer.cancel()
         # Copying the context keeps the kernel's parent header, so the spinner lands in the right cell.
@@ -263,13 +282,15 @@ class _CellSpinner:
             if self._timer is timer:
                 self._move()
 
-    def _move(self) -> None:
+    def _move(self, delay_s: float = 0.0) -> None:
         with self._lock:
             self._timer = None
             if not self._running or self._clear_pending or self.shell.display_pub is not self._display_pub:
                 return
             if _output_widget_capturing():
-                self._schedule_move(MOVE_DEBOUNCE_S)
+                # Unthreaded, the spinner is moved again with the next output instead.
+                if self.threaded:
+                    self._schedule_move(MOVE_DEBOUNCE_S)
                 return
             self._local.active = True
             try:
@@ -277,12 +298,13 @@ class _CellSpinner:
                 for stream in (sys.stdout, sys.stderr):
                     stream.flush()
                 self._hide()
-                self._handle = display(self._bundle(), raw=True, display_id=True)
+                self._handle = display(self._bundle(delay_s), raw=True, display_id=True)
+                self._last_move = time.monotonic()
             finally:
                 self._local.active = False
 
-    def _bundle(self) -> dict[str, str]:
-        return {"text/html": spinner_html(self.message), "text/plain": self.message}
+    def _bundle(self, delay_s: float = 0.0) -> dict[str, str]:
+        return {"text/html": spinner_html(self.message, delay_s), "text/plain": self.message}
 
     def _hide(self) -> None:
         if self._handle is not None:
@@ -307,7 +329,10 @@ class _CellSpinner:
             self._clear_pending = False
             self.message = self.default_message
             self._patch_streams()
-            self._schedule_move(SHOW_DELAY_S)
+            if self.threaded:
+                self._schedule_move(SHOW_DELAY_S)
+            else:
+                self._move(SHOW_DELAY_S)
 
     def _post_run_cell(self, result: ExecutionResult | None) -> None:
         with self._lock:
@@ -324,6 +349,11 @@ class _CellSpinner:
 
 
 _spinner: _CellSpinner | None = None
+
+
+def running_in_colab() -> bool:
+    """Return True when running in Google Colab."""
+    return "google.colab" in sys.modules
 
 
 def enable_cell_spinner(message: str = DEFAULT_MESSAGE) -> None:
@@ -343,7 +373,7 @@ def enable_cell_spinner(message: str = DEFAULT_MESSAGE) -> None:
     if _spinner is not None:
         _spinner.default_message = message
         return
-    _spinner = _CellSpinner(shell, message)
+    _spinner = _CellSpinner(shell, message, threaded=not running_in_colab())
     _spinner.install()
 
 
