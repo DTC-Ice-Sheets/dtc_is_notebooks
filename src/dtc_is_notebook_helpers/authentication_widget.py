@@ -19,6 +19,7 @@ Without an explicit token, the widget starts empty and unauthenticated.
 
 VS Code does not pass pasted text into widget inputs, so there the widget hides its input box and
 ``wait_until_authenticated`` asks for the token in VS Code's own hidden-input prompt instead.
+Google Colab uses the same prompt, shown below the cell.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ from IPython import get_ipython
 from IPython.display import display
 from jupyter_ui_poll import ui_events
 
-from .cell_spinner import BusyIndicator, suppress_cell_spinner
+from .cell_spinner import BusyIndicator, running_in_colab, suppress_cell_spinner
 
 API_HOST = "https://query.dtc-ice-sheets.org"
 TOKEN_URL = f"{API_HOST}/auth/get-token"
@@ -54,6 +55,7 @@ CHECK_TIMEOUT_S = 5.0
 TOKEN_INPUT_PLACEHOLDER = "paste your API token here..."  # noqa: S105 - placeholder text, not a credential.
 AUTHENTICATED_PLACEHOLDER = "token submitted, to submit another token please rerun the cell first."
 VSCODE_LABEL_HTML = LABEL_HTML.replace("):", "): please paste into the prompt at the top of the window.")
+COLAB_LABEL_HTML = LABEL_HTML.replace("):", "): please paste it into the box below and press Enter.")
 VSCODE_PROMPT = "Please paste in your DTC API token and press Enter"
 
 
@@ -156,11 +158,19 @@ class ApiTokenWidget(widgets.VBox):
         self._check_task: asyncio.Future | None = None
         self._authenticated = asyncio.Event()
         # VS Code does not pass pasted text into widget inputs, so the token is asked for in a native prompt.
-        self.uses_native_prompt = running_in_vscode()
+        # Colab uses the same prompt, which keeps the cell waiting without relying on widget events.
+        # Colab draws the prompt text in front of its (wide) input box, so there the label above explains it.
+        if running_in_vscode():
+            native_label, self._native_prompt = VSCODE_LABEL_HTML, VSCODE_PROMPT
+        elif running_in_colab():
+            native_label, self._native_prompt = COLAB_LABEL_HTML, ""
+        else:
+            native_label, self._native_prompt = None, ""
+        self.uses_native_prompt = native_label is not None
 
         self.submit_button.on_click(self._on_submit)
         if self.uses_native_prompt:
-            self.label.value = VSCODE_LABEL_HTML
+            self.label.value = native_label
             input_row = widgets.HBox([self.label])
         else:
             input_row = widgets.HBox([self.label, self.token_input, self.submit_button])
@@ -204,7 +214,7 @@ class ApiTokenWidget(widgets.VBox):
                 await self._check_task
                 continue
             # Looked up at call time, because ipykernel replaces ``getpass.getpass`` while a cell runs.
-            token = getpass.getpass(VSCODE_PROMPT).strip()
+            token = getpass.getpass(self._native_prompt).strip()
             if not token:
                 self.status.stop("No API token entered, please rerun this cell.")
                 return
