@@ -17,6 +17,7 @@ VALID_CREDENTIAL = "test-token"
 def not_in_vscode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Show the regular widget, even when the tests run from a VS Code terminal."""
     monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: False)
+    monkeypatch.setattr(authentication_widget, "running_in_colab", lambda: False)
 
 
 def _client() -> ApiClient:
@@ -329,14 +330,37 @@ def test_running_in_vscode(monkeypatch: pytest.MonkeyPatch, environ: dict[str, s
     assert authentication_widget.running_in_vscode() is expected
 
 
-def test_vscode_widget_hides_token_input(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: True)
+@pytest.mark.parametrize(
+    ("modules", "expected"),
+    [({"google.colab": object()}, True), ({}, False)],
+)
+def test_running_in_colab(monkeypatch: pytest.MonkeyPatch, modules: dict[str, object], expected: bool):
+    monkeypatch.undo()
+    monkeypatch.setattr(authentication_widget.sys, "modules", modules)
+
+    assert authentication_widget.running_in_colab() is expected
+
+
+@pytest.mark.parametrize(
+    ("in_vscode", "in_colab", "label"),
+    [
+        (True, False, authentication_widget.VSCODE_LABEL_HTML),
+        (False, True, authentication_widget.COLAB_LABEL_HTML),
+        (True, True, authentication_widget.COLAB_LABEL_HTML),
+    ],
+)
+def test_native_prompt_widget_hides_token_input(
+    monkeypatch: pytest.MonkeyPatch, in_vscode: bool, in_colab: bool, label: str
+):
+    monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: in_vscode)
+    monkeypatch.setattr(authentication_widget, "running_in_colab", lambda: in_colab)
 
     widget = authentication_widget.ApiTokenWidget()
 
+    assert widget.uses_native_prompt
     input_row = widget.children[0]
     assert list(input_row.children) == [widget.label]
-    assert widget.label.value == authentication_widget.VSCODE_LABEL_HTML
+    assert widget.label.value == label
     assert widget.children[1] is widget.status
 
 
@@ -358,6 +382,10 @@ def test_vscode_wait_prompts_until_authenticated_or_cancelled(
     check_api_token = AsyncMock(side_effect=[_response(code) for code in status_codes])
     monkeypatch.setattr(authentication_widget, "check_api_token", check_api_token)
     monkeypatch.setattr(authentication_widget.os, "environ", {})
+    clear_output = MagicMock()
+    monkeypatch.setattr(authentication_widget, "clear_output", clear_output)
+    display = MagicMock()
+    monkeypatch.setattr(authentication_widget, "display", display)
 
     widget = authentication_widget.ApiTokenWidget()
     with nullcontext() if authenticated else pytest.raises(KeyboardInterrupt, match="API token entry cancelled"):
@@ -367,3 +395,7 @@ def test_vscode_wait_prompts_until_authenticated_or_cancelled(
     assert check_api_token.await_count == len(status_codes)
     assert widget.is_authenticated is authenticated
     assert widget.token == (VALID_CREDENTIAL if authenticated else None)
+    # Every answered prompt is cleared away and the widget shown again in its place.
+    assert clear_output.call_count == len(prompted_tokens)
+    display.assert_called_with(widget)
+    assert display.call_count == len(prompted_tokens)
