@@ -373,3 +373,81 @@ def test_busy_indicator_requires_ipywidgets(monkeypatch: pytest.MonkeyPatch) -> 
 
     with pytest.raises(ImportError, match="requires ipywidgets"):
         cell_spinner.BusyIndicator()
+
+
+@pytest.mark.parametrize(
+    ("delay_s", "expected"),
+    [
+        (0.0, '<div class="nb-spinner">'),
+        (0.1, '<div class="nb-spinner nb-spinner--delayed" style="animation-delay:0.1s">'),
+    ],
+    ids=["visible", "delayed"],
+)
+def test_spinner_html_delay(delay_s: float, expected: str) -> None:
+    assert expected in cell_spinner.spinner_html("Loading", delay_s)
+
+
+@pytest.mark.parametrize(
+    ("in_colab", "expected_class"),
+    [(False, cell_spinner._CellSpinner), (True, cell_spinner._WidgetCellSpinner)],
+    ids=["jupyter", "colab"],
+)
+def test_enable_cell_spinner_uses_widget_spinner_in_colab(
+    monkeypatch: pytest.MonkeyPatch, in_colab: bool, expected_class: type
+) -> None:
+    shell = MagicMock()
+    shell.kernel = object()
+    monkeypatch.setattr(cell_spinner, "get_ipython", lambda: shell)
+    monkeypatch.setattr(cell_spinner, "running_in_colab", lambda: in_colab)
+
+    cell_spinner.enable_cell_spinner("Default")
+
+    assert type(cell_spinner._spinner) is expected_class
+    shell.events.register.assert_any_call("pre_run_cell", cell_spinner._spinner._pre_run_cell)
+    shell.events.register.assert_any_call("post_run_cell", cell_spinner._spinner._post_run_cell)
+
+
+def test_widget_cell_spinner_shows_indicator_while_cell_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    display = MagicMock()
+    monkeypatch.setattr(cell_spinner, "display", display)
+    spinner = cell_spinner._WidgetCellSpinner(MagicMock(), "Default")
+
+    spinner._pre_run_cell(MagicMock())
+    indicator = spinner._indicator
+
+    display.assert_called_once_with(indicator)
+    assert indicator.busy is True
+    assert indicator.value == cell_spinner.spinner_html("Default", cell_spinner.SHOW_DELAY_S)
+
+    spinner.set_message("Downloading")
+    assert indicator.value == cell_spinner.spinner_html("Downloading")
+    spinner.set_message(None)
+    assert indicator.value == cell_spinner.spinner_html("Default")
+
+    spinner._post_run_cell(None)
+
+    assert indicator.busy is False
+    assert indicator.value == ""
+    assert spinner._indicator is None
+
+
+def test_widget_cell_spinner_set_message_without_running_cell_does_nothing() -> None:
+    spinner = cell_spinner._WidgetCellSpinner(MagicMock())
+
+    spinner.set_message("Downloading")
+
+    assert spinner._indicator is None
+
+
+def test_widget_cell_spinner_uninstall_stops_indicator_and_unregisters(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cell_spinner, "display", MagicMock())
+    shell = MagicMock()
+    spinner = cell_spinner._WidgetCellSpinner(shell)
+    spinner._pre_run_cell(MagicMock())
+    indicator = spinner._indicator
+
+    spinner.uninstall()
+
+    assert indicator.busy is False
+    shell.events.unregister.assert_any_call("pre_run_cell", spinner._pre_run_cell)
+    shell.events.unregister.assert_any_call("post_run_cell", spinner._post_run_cell)

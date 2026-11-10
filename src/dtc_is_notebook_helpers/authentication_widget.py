@@ -16,11 +16,16 @@ a token is accepted, without blocking widget interactions.
 Each call to ``request_api_token`` clears the ``DTC_API_TOKEN`` environment variable and starts fresh.
 To provide a token up front, use ``request_api_token(token=your_token)``; it is checked automatically.
 Without an explicit token, the widget starts empty and unauthenticated.
+
+VS Code does not pass pasted text into widget inputs, so there the widget hides its input box and
+``wait_until_authenticated`` asks for the token in VS Code's own hidden-input prompt instead.
+Google Colab uses the same prompt, shown below the cell.
 """
 
 from __future__ import annotations
 
 import asyncio
+import getpass
 import json
 import os
 from typing import Any
@@ -34,7 +39,7 @@ from IPython import get_ipython
 from IPython.display import display
 from jupyter_ui_poll import ui_events
 
-from .cell_spinner import BusyIndicator, suppress_cell_spinner
+from .cell_spinner import BusyIndicator, running_in_colab, suppress_cell_spinner
 
 API_HOST = "https://query.dtc-ice-sheets.org"
 TOKEN_URL = f"{API_HOST}/auth/get-token"
@@ -49,6 +54,21 @@ LABEL_HTML = (
 CHECK_TIMEOUT_S = 5.0
 TOKEN_INPUT_PLACEHOLDER = "paste your API token here..."  # noqa: S105 - placeholder text, not a credential.
 AUTHENTICATED_PLACEHOLDER = "token submitted, to submit another token please rerun the cell first."
+VSCODE_LABEL_HTML = LABEL_HTML.replace("):", "): please paste into the prompt at the top of the window.")
+COLAB_LABEL_HTML = LABEL_HTML.replace("):", "): please paste it into the box below and press Enter.")
+VSCODE_PROMPT = "Please paste in your DTC API token and press Enter"
+
+
+def running_in_vscode() -> bool:
+    """
+    Return True if the kernel was started by VS Code.
+
+    Returns
+    -------
+    bool
+        True if any ``VSCODE_*`` environment variable is set.
+    """
+    return any(name.startswith("VSCODE_") for name in os.environ)
 
 
 class _CredentialInput(widgets.Password):
@@ -137,15 +157,24 @@ class ApiTokenWidget(widgets.VBox):
         self.token: str | None = None
         self._check_task: asyncio.Future | None = None
         self._authenticated = asyncio.Event()
+        # VS Code does not pass pasted text into widget inputs, so the token is asked for in a native prompt.
+        # Colab uses the same prompt, which keeps the cell waiting without relying on widget events.
+        # Colab draws the prompt text in front of its (wide) input box, so there the label above explains it.
+        if running_in_vscode():
+            native_label, self._native_prompt = VSCODE_LABEL_HTML, VSCODE_PROMPT
+        elif running_in_colab():
+            native_label, self._native_prompt = COLAB_LABEL_HTML, ""
+        else:
+            native_label, self._native_prompt = None, ""
+        self.uses_native_prompt = native_label is not None
 
         self.submit_button.on_click(self._on_submit)
-        super().__init__(
-            children=[
-                widgets.HBox([self.label, self.token_input, self.submit_button]),
-                self.status,
-            ],
-            **kwargs,
-        )
+        if self.uses_native_prompt:
+            self.label.value = native_label
+            input_row = widgets.HBox([self.label])
+        else:
+            input_row = widgets.HBox([self.label, self.token_input, self.submit_button])
+        super().__init__(children=[input_row, self.status], **kwargs)
 
     @property
     def is_authenticated(self) -> bool:
@@ -163,6 +192,10 @@ class ApiTokenWidget(widgets.VBox):
         if self._authenticated.is_set():
             return
         with suppress_cell_spinner():
+            if self.uses_native_prompt:
+                await self._prompt_until_authenticated()
+                return
+
             shell = get_ipython()
             if shell is None or getattr(shell, "kernel", None) is None or kernel_version >= (7, 4):
                 await self._authenticated.wait()
@@ -173,6 +206,21 @@ class ApiTokenWidget(widgets.VBox):
                 while not self._authenticated.is_set():
                     await poll(10)
                     await asyncio.sleep(0.05)
+
+    async def _prompt_until_authenticated(self) -> None:
+        """Ask for the token in a native prompt until it is valid, or until the prompt is left empty."""
+        while not self._authenticated.is_set():
+            if self._check_task is not None and not self._check_task.done():
+                await self._check_task
+                continue
+            # Looked up at call time, because ipykernel replaces ``getpass.getpass`` while a cell runs.
+            token = getpass.getpass(self._native_prompt).strip()
+            if not token:
+                self.status.stop("No API token entered, please rerun this cell.")
+                return
+            self.submit(token)
+            if self._check_task is not None:
+                await self._check_task
 
     def _on_submit(self, _button: widgets.Button) -> None:
         self.submit()
