@@ -328,14 +328,26 @@ def test_running_in_vscode(monkeypatch: pytest.MonkeyPatch, environ: dict[str, s
     assert authentication_widget.running_in_vscode() is expected
 
 
-def test_vscode_widget_hides_token_input(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: True)
+@pytest.mark.parametrize(
+    ("in_vscode", "in_colab", "expected_label"),
+    [
+        (True, False, authentication_widget.VSCODE_LABEL_HTML),
+        (False, True, authentication_widget.COLAB_LABEL_HTML),
+    ],
+    ids=["vscode", "colab"],
+)
+def test_native_prompt_widget_hides_token_input(
+    monkeypatch: pytest.MonkeyPatch, in_vscode: bool, in_colab: bool, expected_label: str
+):
+    monkeypatch.setattr(authentication_widget, "running_in_vscode", lambda: in_vscode)
+    monkeypatch.setattr(authentication_widget, "running_in_colab", lambda: in_colab)
 
     widget = authentication_widget.ApiTokenWidget()
 
+    assert widget.uses_native_prompt is True
     input_row = widget.children[0]
     assert list(input_row.children) == [widget.label]
-    assert widget.label.value == authentication_widget.VSCODE_LABEL_HTML
+    assert widget.label.value == expected_label
     assert widget.children[1] is widget.status
 
 
