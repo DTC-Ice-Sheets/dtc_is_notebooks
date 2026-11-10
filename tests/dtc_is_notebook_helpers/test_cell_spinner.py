@@ -373,3 +373,66 @@ def test_busy_indicator_requires_ipywidgets(monkeypatch: pytest.MonkeyPatch) -> 
 
     with pytest.raises(ImportError, match="requires ipywidgets"):
         cell_spinner.BusyIndicator()
+
+
+
+@pytest.mark.parametrize(("in_colab", "threaded"), [(False, True), (True, False)], ids=["jupyter", "colab"])
+def test_enable_cell_spinner_runs_without_timer_in_colab(
+    monkeypatch: pytest.MonkeyPatch, in_colab: bool, threaded: bool
+) -> None:
+    shell = MagicMock()
+    shell.kernel = object()
+    monkeypatch.setattr(cell_spinner, "get_ipython", lambda: shell)
+    monkeypatch.setattr(cell_spinner, "running_in_colab", lambda: in_colab)
+
+    cell_spinner.enable_cell_spinner()
+
+    assert cell_spinner._spinner.threaded is threaded
+
+
+@pytest.mark.parametrize(
+    ("delay_s", "expected"),
+    [
+        (0.0, '<div class="nb-spinner">'),
+        (0.1, '<div class="nb-spinner nb-spinner--delayed" style="animation-delay:0.1s">'),
+    ],
+    ids=["visible", "delayed"],
+)
+def test_spinner_html_delay(delay_s: float, expected: str) -> None:
+    assert expected in cell_spinner.spinner_html("Loading", delay_s)
+
+
+def _unthreaded_spinner(monkeypatch: pytest.MonkeyPatch) -> tuple[cell_spinner._CellSpinner, MagicMock]:
+    shell = MagicMock()
+    spinner = cell_spinner._CellSpinner(shell, "Loading", threaded=False)
+    spinner._display_pub = shell.display_pub
+    spinner._patch_streams = MagicMock()
+    display = MagicMock(side_effect=lambda *args, **kwargs: MagicMock())
+    monkeypatch.setattr(cell_spinner, "display", display)
+    monkeypatch.setattr(cell_spinner, "_output_widget_capturing", lambda: False)
+    monkeypatch.setattr(cell_spinner.threading, "Timer", MagicMock(side_effect=AssertionError("no timers")))
+    return spinner, display
+
+
+def test_unthreaded_pre_run_cell_displays_delayed_spinner_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    spinner, display = _unthreaded_spinner(monkeypatch)
+
+    spinner._pre_run_cell(MagicMock())
+
+    display.assert_called_once_with(spinner._bundle(cell_spinner.SHOW_DELAY_S), raw=True, display_id=True)
+    assert spinner._handle is not None
+
+
+@pytest.mark.parametrize(("seconds_since_move", "moved"), [(0.0, False), (1.0, True)], ids=["recent", "stale"])
+def test_unthreaded_output_moves_spinner_at_most_once_per_debounce(
+    monkeypatch: pytest.MonkeyPatch, seconds_since_move: float, moved: bool
+) -> None:
+    spinner, display = _unthreaded_spinner(monkeypatch)
+    spinner._pre_run_cell(MagicMock())
+    first_handle = spinner._handle
+    monkeypatch.setattr(cell_spinner.time, "monotonic", lambda: spinner._last_move + seconds_since_move)
+
+    spinner._on_output()
+
+    assert display.call_count == (2 if moved else 1)
+    assert (spinner._handle is not first_handle) is moved
