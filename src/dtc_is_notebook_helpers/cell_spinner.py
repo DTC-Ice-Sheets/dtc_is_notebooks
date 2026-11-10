@@ -77,11 +77,13 @@ _CSS = (
     "border:2px solid var(--jp-border-color2,#e0e0e0);border-top-color:var(--jp-brand-color1,#1976d2);"
     "animation:nb-spinner-rotate .8s linear infinite}"
     "@keyframes nb-spinner-rotate{to{transform:rotate(360deg)}}"
+    ".nb-spinner--delayed{opacity:0;animation:nb-spinner-show 0s forwards}"
+    "@keyframes nb-spinner-show{to{opacity:1}}"
     "</style>"
 )
 
 
-def spinner_html(message: str = DEFAULT_MESSAGE) -> str:
+def spinner_html(message: str = DEFAULT_MESSAGE, delay_s: float = 0.0) -> str:
     """
     Return the HTML for an animated spinner followed by a message.
 
@@ -89,14 +91,21 @@ def spinner_html(message: str = DEFAULT_MESSAGE) -> str:
     ----------
     message : str
         Text shown next to the spinner.
+    delay_s : float
+        Seconds before the spinner becomes visible; it is hidden by CSS until then.
 
     Returns
     -------
     str
         Self-contained HTML snippet.
     """
+    spinner_div = (
+        f'<div class="nb-spinner nb-spinner--delayed" style="animation-delay:{delay_s:g}s">'
+        if delay_s > 0
+        else '<div class="nb-spinner">'
+    )
     return (
-        f'{_CSS}<div class="nb-spinner"><div class="nb-spinner__ring"></div>'
+        f'{_CSS}{spinner_div}<div class="nb-spinner__ring"></div>'
         f'<span style="color:var(--jp-ui-font-color1,CanvasText)">{html.escape(message)}</span></div>'
     )
 
@@ -323,7 +332,19 @@ class _CellSpinner:
                 self._local.active = False
 
 
-_spinner: _CellSpinner | None = None
+_spinner: _CellSpinner | _WidgetCellSpinner | None = None
+
+
+def running_in_colab() -> bool:
+    """
+    Return True when running in Google Colab.
+
+    Returns
+    -------
+    bool
+        True if the ``google.colab`` module has been imported.
+    """
+    return "google.colab" in sys.modules
 
 
 def enable_cell_spinner(message: str = DEFAULT_MESSAGE) -> None:
@@ -343,7 +364,9 @@ def enable_cell_spinner(message: str = DEFAULT_MESSAGE) -> None:
     if _spinner is not None:
         _spinner.default_message = message
         return
-    _spinner = _CellSpinner(shell, message)
+    # In Colab, displaying output from the cell spinner's background thread made "Run all" start later cells
+    # early, so there each running cell shows a BusyIndicator instead.
+    _spinner = _WidgetCellSpinner(shell, message) if running_in_colab() else _CellSpinner(shell, message)
     _spinner.install()
 
 
@@ -409,10 +432,10 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
         super().__init__(**kwargs)
         self.busy = False
 
-    def start(self, message: str = "Working…") -> None:
-        """Show the spinner with ``message``."""
+    def start(self, message: str = "Working…", delay_s: float = 0.0) -> None:
+        """Show the spinner with ``message``, hidden by CSS for the first ``delay_s`` seconds."""
         self.busy = True
-        self.value = spinner_html(message)
+        self.value = spinner_html(message, delay_s)
 
     def update(self, message: str) -> None:
         """Change the message, keeping the spinner if busy."""
@@ -470,3 +493,39 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
             return wrapper
 
         return decorator
+
+
+class _WidgetCellSpinner:
+    """Show a :class:`BusyIndicator` at the top of the output of the currently running cell."""
+
+    def __init__(self, shell: InteractiveShell, message: str = DEFAULT_MESSAGE) -> None:
+        self.shell = shell
+        self.default_message = message
+        self._indicator: BusyIndicator | None = None
+
+    def install(self) -> None:
+        """Register IPython event callbacks."""
+        self.shell.events.register("pre_run_cell", self._pre_run_cell)
+        self.shell.events.register("post_run_cell", self._post_run_cell)
+
+    def uninstall(self) -> None:
+        """Remove IPython event callbacks."""
+        self._post_run_cell(None)
+        self.shell.events.unregister("pre_run_cell", self._pre_run_cell)
+        self.shell.events.unregister("post_run_cell", self._post_run_cell)
+
+    def set_message(self, message: str | None) -> None:
+        """Change the text next to the spinner, ``None`` restores the default message."""
+        if self._indicator is not None:
+            self._indicator.update(self.default_message if message is None else message)
+
+    def _pre_run_cell(self, info: ExecutionInfo) -> None:
+        self._indicator = BusyIndicator()
+        # Hidden by CSS for SHOW_DELAY_S, so that cells finishing quickly do not flash a spinner.
+        self._indicator.start(self.default_message, delay_s=SHOW_DELAY_S)
+        display(self._indicator)
+
+    def _post_run_cell(self, result: ExecutionResult | None) -> None:
+        if self._indicator is not None:
+            self._indicator.stop()
+            self._indicator = None
