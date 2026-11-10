@@ -1,6 +1,7 @@
 """Tests for the API token authentication widget."""
 
 import asyncio
+from contextlib import nullcontext
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -359,7 +360,8 @@ def test_vscode_wait_prompts_until_authenticated_or_cancelled(
     monkeypatch.setattr(authentication_widget.os, "environ", {})
 
     widget = authentication_widget.ApiTokenWidget()
-    asyncio.run(widget.wait_until_authenticated())
+    with nullcontext() if authenticated else pytest.raises(KeyboardInterrupt, match="API token entry cancelled"):
+        asyncio.run(widget.wait_until_authenticated())
 
     assert prompt.call_count == len(prompted_tokens)
     assert check_api_token.await_count == len(status_codes)
