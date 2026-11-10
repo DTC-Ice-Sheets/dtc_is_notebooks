@@ -287,6 +287,15 @@ def test_an_extra_predictor_costs_a_degree_of_freedom(discharge, monthly):
     assert with_lakes.dof == plain.dof - 1
 
 
+def test_a_season_with_no_curve_is_left_out_of_the_shape_model(discharge, monthly):
+    # A truncated forcing record - RACMO 2 km stops in 2020 - would otherwise
+    # leave an all-NaN profile in `profiles`, which `summarise` cannot reduce.
+    truncated = monthly[~((monthly.index.year == LAST_YEAR) & (monthly.index.month == 9))]
+    model = uc1.ShapeModel.fit(discharge, truncated)
+    assert LAST_YEAR not in {int(y) for y in model.years}
+    assert np.isfinite(model.profiles(model.years).to_numpy()).all()
+
+
 def test_a_season_missing_a_melt_month_has_no_curve(discharge, monthly):
     flow = uc1.monthly_flow(monthly)
     truncated = flow[~((flow.index.year == FIRST_YEAR) & (flow.index.month == 9))]

@@ -1192,6 +1192,11 @@ class ShapeModel:
         observed = step_matrix(discharge, step_days)
         flow = monthly_flow(monthly_mm, area_m2)
         years = np.array([y for y in observed.index if y in set(flow.index.year)])
+        # A season without every melt month has no curve, so it can be neither
+        # fitted nor predicted. Dropping it here keeps `years`, the fit and
+        # `profiles` over the same seasons, and matches `seasonal_predictor`.
+        years = np.array([y for y in years
+                          if np.isfinite(season_shape(flow, int(y), step_days, 0)).all()])
         extra_frame = None
         if extras is not None:
             extra_frame = (extras.to_frame() if isinstance(extras, pd.Series)
