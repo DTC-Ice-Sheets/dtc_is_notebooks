@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from dtc_is_notebook_helpers import uc1_hydro_helpers as uc1
 
@@ -406,3 +407,156 @@ def test_load_basin_and_load_mesh_read_the_packaged_geometry():
     assert vertices.shape[1] >= 2
     assert triangles.shape[1] == 3
     assert triangles.max() < len(vertices)
+
+
+# ---------------------------------------------------------------------------
+# Reading the deployed modules' outputs back. Each job output is a small
+# in-memory dataset shaped like what the module writes, so the expected values
+# are known.
+# ---------------------------------------------------------------------------
+
+RUNOFF = "log10_surface_runoff_amount"
+
+
+@pytest.fixture
+def grf_dataset() -> xr.Dataset:
+    """Build a GRF-shaped output: a log10 field over two timesteps on a 2 x 3 grid, with spread."""
+    values = np.arange(2 * 2 * 3, dtype=float).reshape(2, 2, 3)
+    return xr.Dataset(
+        data_vars={
+            RUNOFF: (("time", "x", "y"), values),
+            f"{RUNOFF}_uncertainty": (("time", "x", "y"), values * 0.1),
+        },
+        coords={"time": pd.to_datetime(["2019-06-15", "2019-07-15"]),
+                "x": [0.0, 1000.0], "y": [0.0, 1000.0, 2000.0]},
+    )
+
+
+@pytest.fixture
+def fts_dataset() -> xr.Dataset:
+    """Build an FTS-shaped output: four curves by three factors for the runoff field."""
+    return xr.Dataset(
+        data_vars={RUNOFF: (("curve_id", "coef_id"), np.arange(4 * 3, dtype=float).reshape(4, 3))},
+        coords={"curve_id": np.arange(4), "coef_id": np.arange(3)},
+    )
+
+
+@pytest.fixture
+def gauge_dataset() -> xr.Dataset:
+    """Four days of the gap-filled and measured gauge series."""
+    return xr.Dataset(
+        data_vars={
+            uc1.DISCHARGE_VARIABLE: (("time",), np.array([10.0, 20.0, 30.0, 40.0])),
+            f"measured_{uc1.DISCHARGE_VARIABLE}": (("time",), np.array([10.0, np.nan, 30.0, 40.0])),
+        },
+        coords={"time": pd.to_datetime(["2019-07-01", "2019-07-02", "2019-07-03", "2019-07-04"])},
+    )
+
+
+@pytest.mark.parametrize(
+    ("measured_only", "expected"),
+    [(False, [10.0, 20.0, 30.0, 40.0]), (True, [10.0, np.nan, 30.0, 40.0])],
+    ids=["gap-filled", "measured-only-keeps-the-gap"],
+)
+def test_discharge_series_reads_the_chosen_record_as_a_daily_series(gauge_dataset, measured_only, expected):
+    series = uc1.discharge_series(gauge_dataset, measured_only=measured_only)
+
+    assert series.index[0] == pd.Timestamp("2019-07-01")
+    np.testing.assert_allclose(series.to_numpy(), expected)
+
+
+@pytest.mark.parametrize(
+    ("variable", "expected"),
+    [(RUNOFF, [1.0, 10.0]), ("surface_runoff_amount", [0.0, 1.0])],
+    ids=["log10-is-undone", "linear-is-left-alone"],
+)
+def test_linear_scale_only_undoes_a_log10_variable(variable, expected):
+    frame = pd.DataFrame({"cell": [0.0, 1.0]})
+
+    np.testing.assert_allclose(uc1.linear_scale(frame, variable)["cell"], expected)
+
+
+def test_grf_fields_reads_a_table_and_its_cell_positions(grf_dataset: xr.Dataset):
+    result = uc1.grf_fields(grf_dataset)
+
+    assert result["variable"] == RUNOFF
+    assert result["fields"].shape == (2, 6)             # two timesteps, 2 x 3 cells
+    assert result["uncertainty"].shape == (2, 6)
+    assert result["points"].shape == (6, 2)
+    assert list(result["fields"].index) == [pd.Timestamp("2019-06-15"),
+                                            pd.Timestamp("2019-07-15")]
+
+
+def test_grf_fields_cell_positions_line_up_with_the_columns(grf_dataset: xr.Dataset):
+    # Columns are stacked x-major, so the first three cells share the first x.
+    points = uc1.grf_fields(grf_dataset)["points"]
+
+    np.testing.assert_allclose(points[:3, 0], [0.0, 0.0, 0.0])
+    np.testing.assert_allclose(points[:3, 1], [0.0, 1000.0, 2000.0])
+    np.testing.assert_allclose(points[3:, 0], [1000.0, 1000.0, 1000.0])
+
+
+@pytest.mark.parametrize(
+    ("variable", "first_cells"),
+    [(RUNOFF, [1.0, 10.0, 100.0]), ("surface_runoff_amount", [0.0, 1.0, 2.0])],
+    ids=["log10-on-its-linear-scale", "linear-left-alone"],
+)
+def test_grf_fields_returns_the_field_on_its_linear_scale(grf_dataset: xr.Dataset, variable: str, first_cells: list):
+    ds = grf_dataset.rename({RUNOFF: variable, f"{RUNOFF}_uncertainty": f"{variable}_uncertainty"})
+
+    result = uc1.grf_fields(ds)
+
+    np.testing.assert_allclose(result["fields"].to_numpy()[0, :3], first_cells)
+    # The posterior spread stays as stored, in log10 units for a log10 field.
+    np.testing.assert_allclose(result["uncertainty"].to_numpy()[0, :3], [0.0, 0.1, 0.2])
+
+
+def test_grf_fields_refuses_an_output_with_no_gridded_field(grf_dataset: xr.Dataset):
+    # Averaged over the grid, the field has a time axis and nothing else.
+    ds = grf_dataset.mean(dim=("x", "y"))
+
+    with pytest.raises(ValueError, match="no gridded field"):
+        uc1.grf_fields(ds)
+
+
+def test_fts_coefficients_reads_curves_by_factor(fts_dataset: xr.Dataset):
+    result = uc1.fts_coefficients(fts_dataset)
+
+    assert result["coefficients"].shape == (4, 3)
+    assert list(result["coefficients"].columns) == ["factor_1", "factor_2", "factor_3"]
+
+
+def test_fts_coefficients_takes_the_fields_set_over_the_uncertainty_one(fts_dataset: xr.Dataset):
+    """
+    The module fits every spatial variable, and the GRF output carries the spread too.
+
+    Both sets land in one store with nothing in the names to say which is which, so the
+    reader has to choose rather than refuse.
+    """
+    ds = fts_dataset.assign({f"{RUNOFF}_uncertainty": fts_dataset[RUNOFF] + 1})
+
+    result = uc1.fts_coefficients(ds)
+
+    assert RUNOFF in result["layout"]
+    assert "uncertainty" not in result["layout"]
+    # The field's values are the lower set.
+    np.testing.assert_allclose(result["coefficients"].to_numpy()[0], [0.0, 1.0, 2.0])
+
+
+@pytest.mark.parametrize("dims", [("curve_id", "coef_id"), ("coef_id", "curve_id")])
+def test_fts_coefficients_named_dimensions_decide_which_axis_holds_the_curves(
+        fts_dataset: xr.Dataset, dims: tuple[str, str]):
+    """Two seasons and three factors is already curves by factor, and must not be flipped."""
+    ds = fts_dataset.isel(curve_id=slice(0, 2)).transpose(*dims)
+
+    result = uc1.fts_coefficients(ds)
+
+    np.testing.assert_allclose(result["coefficients"].to_numpy(), np.arange(6, dtype=float).reshape(2, 3))
+
+
+def test_fts_coefficients_names_what_an_unreadable_output_holds(fts_dataset: xr.Dataset):
+    # A single curve leaves one one-dimensional variable, which reads as nothing.
+    ds = fts_dataset.isel(curve_id=0)
+
+    with pytest.raises(ValueError, match=RUNOFF):
+        uc1.fts_coefficients(ds)

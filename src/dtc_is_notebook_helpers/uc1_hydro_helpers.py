@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 from matplotlib.path import Path as MplPath
 from scipy.stats import t as student_t
 
@@ -1478,3 +1479,193 @@ def shape_leave_one_year_out(discharge: pd.Series, monthly_mm: pd.Series,
 
     return pd.concat({"observed": observed.loc[years], "predicted": predicted},
                      axis=1)
+
+
+# ---------------------------------------------------------------------------
+# Reading the deployed modules' outputs back
+#
+# The jobs themselves are run through ``api_helpers``, which returns the URL of
+# the GeoZarr each one wrote. These take that GeoZarr, opened as a dataset, and
+# turn it into what the notebook works on.
+# ---------------------------------------------------------------------------
+
+#: The gap-filled gauge series. The measurement-only record, which has holes in
+#: it, sits beside it under a ``measured_`` prefix.
+DISCHARGE_VARIABLE = "water_volume_transport_in_river_channel"
+
+
+def discharge_series(ds: xr.Dataset, measured_only: bool = False) -> pd.Series:
+    """
+    Read the Watson gauge record back as a daily series in cubic metres per second.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The GeoZarr a download job for ``UC1_WATSON_DISCHARGE_GAUGE`` wrote, as
+        opened from the URL :func:`api_helpers.download_dataset` returns.
+    measured_only : bool, optional
+        True for the pressure-transducer record without its gap filling. The
+        default is the gap-filled series, which is what the use case models.
+
+    Returns
+    -------
+    pandas.Series
+        Discharge in m3 s-1, indexed by date, with gaps kept as NaN.
+    """
+    name = f"measured_{DISCHARGE_VARIABLE}" if measured_only else DISCHARGE_VARIABLE
+    values = np.asarray(ds[name].values, dtype=float).ravel()
+    return pd.Series(values, index=pd.DatetimeIndex(ds["time"].values),
+                     name="discharge_m3s").sort_index()
+
+
+def linear_scale(frame: pd.DataFrame, variable: str) -> pd.DataFrame:
+    """
+    Undo the log10 the published collections are stored on, where they are.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        Values as the store holds them.
+    variable : str
+        The variable's name, which is what says whether it is a log.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The values on their linear scale, or the input unchanged.
+    """
+    return 10.0 ** frame if variable.startswith("log10_") else frame
+
+
+def grf_fields(ds: xr.Dataset) -> dict:
+    """
+    Read a finished GRF job's output back in the shape the notebook uses.
+
+    The deployed module returns its field interpolated onto a regular grid, so
+    the columns here are grid cells rather than mesh nodes. `points` gives the
+    coordinate of each column, in the same order, so a catchment mask can be
+    built for them exactly as one is for the mesh.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The GeoZarr a GRF job wrote, as opened from the URL
+        :func:`api_helpers.run_grf_job` returns.
+
+    Returns
+    -------
+    dict
+        ``fields`` a frame of timestamps by grid cell on the variable's own
+        scale, ``uncertainty`` the matching posterior standard deviations or
+        None, ``uncertainty_mean`` the spread of the spatial mean itself, one
+        value per timestep, or None, ``points`` an (n, 2) array of cell
+        coordinates, and ``variable`` the name the module gave the field.
+    """
+    gridded = [str(name) for name, array in ds.data_vars.items()
+               if set(array.dims) >= {"time", "x", "y"}]
+    variable = next((name for name in gridded if not name.endswith("_uncertainty")), None)
+    if variable is None:
+        raise ValueError(
+            f"no gridded field in the job output; it holds: {', '.join(gridded) or 'nothing'}",
+        )
+
+    def _table(name: str) -> tuple[pd.DataFrame, np.ndarray]:
+        """Flatten one gridded variable, and give the coordinates of its columns."""
+        stacked = ds[name].stack(position=("x", "y")).transpose("time", "position")
+        frame = pd.DataFrame(np.asarray(stacked.values, dtype=float),
+                             index=pd.DatetimeIndex(ds["time"].values))
+        coords = np.column_stack([
+            np.asarray(stacked["position"]["x"].values, dtype=float),
+            np.asarray(stacked["position"]["y"].values, dtype=float),
+        ])
+        return frame, coords
+
+    fields, points = _table(variable)
+    uncertainty = None
+    if f"{variable}_uncertainty" in ds.data_vars:
+        uncertainty, _ = _table(f"{variable}_uncertainty")
+
+    # The spread of the spatial mean is taken from the joint posterior by the
+    # module itself, and is not the same as collapsing the per-cell spreads,
+    # which assumes they are independent. It carries no spatial dimension, so
+    # it comes back as a series rather than through `table`.
+    uncertainty_mean = None
+    if f"{variable}_uncertainty_mean" in ds.data_vars:
+        uncertainty_mean = pd.Series(
+            np.asarray(ds[f"{variable}_uncertainty_mean"].values, dtype=float).ravel(),
+            index=pd.DatetimeIndex(ds["time"].values))
+
+    # The runoff collections are stored as log10. The rest of the chain works
+    # in the linear quantity, so undo it here; the posterior spread stays in
+    # log10 units, which is the form `seasonal_sd` expects.
+    fields = linear_scale(fields, variable)
+
+    return {"fields": fields, "uncertainty": uncertainty,
+            "uncertainty_mean": uncertainty_mean, "points": points,
+            "variable": variable}
+
+
+def fts_coefficients(ds: xr.Dataset) -> dict:
+    """
+    Read a finished FTS job's coefficients back as one row per curve.
+
+    The module writes its coefficients as a GeoZarr. The layout is read from
+    the store rather than assumed: a single two-dimensional variable is taken
+    as curves by factors, and several equal-length one-dimensional variables
+    are taken as one factor each.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        The GeoZarr an FTS job wrote, as opened from the URL
+        :func:`api_helpers.run_fts_job` returns.
+
+    Returns
+    -------
+    dict
+        ``coefficients`` a frame of curves by factor, and ``layout`` a line
+        describing how the store was read.
+
+    Raises
+    ------
+    ValueError
+        If the store holds nothing that can be read as coefficients. The
+        message names what it does hold.
+    """
+    held = {str(name): tuple(array.dims) for name, array in ds.data_vars.items()}
+    two_d = [name for name, dims in held.items() if len(dims) == 2]
+    one_d = [name for name, dims in held.items() if len(dims) == 1]
+
+    # The module analyses every spatial variable it is given, and the GRF
+    # output carries the posterior spread alongside the field itself, so the
+    # store normally holds a set of coefficients for each. The ones wanted here
+    # are the field's: curves fitted to the spread describe a different
+    # quantity, and nothing in the name says so.
+    if len(two_d) > 1:
+        fields = [name for name in two_d if not name.endswith("_uncertainty")]
+        if fields:
+            two_d = fields
+
+    if len(two_d) == 1:
+        name = two_d[0]
+        array = ds[name]
+        if {"curve_id", "coef_id"} <= set(array.dims):
+            array = array.transpose("curve_id", "coef_id")
+        elif array.shape[0] < array.shape[1]:
+            # Curves are the longer axis; factors are few.
+            array = array.T
+        values = np.asarray(array.values, dtype=float)
+        frame = pd.DataFrame(
+            values, columns=[f"factor_{i + 1}" for i in range(values.shape[1])])
+        layout = f"read {name} with dims {held[name]} as curves by factor"
+    elif len(one_d) > 1 and len({ds[name].size for name in one_d}) == 1:
+        frame = pd.DataFrame({f"factor_{i + 1}": np.asarray(ds[name].values, dtype=float)
+                              for i, name in enumerate(sorted(one_d))})
+        layout = f"stacked {len(one_d)} one-dimensional variables: {', '.join(sorted(one_d))}"
+    else:
+        raise ValueError(
+            "the FTS output holds nothing that reads as coefficients. It holds: "
+            + "; ".join(f"{name} {dims}" for name, dims in held.items()),
+        )
+
+    return {"coefficients": frame, "layout": layout}
