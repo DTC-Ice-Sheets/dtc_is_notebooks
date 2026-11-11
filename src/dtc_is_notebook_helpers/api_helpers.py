@@ -1,14 +1,20 @@
-"""Helper functions for interacting with the DTC Query API for mass balance and sea-level response computations."""
+"""Helper functions for interacting with the DTC Query API."""
+
+from __future__ import annotations
 
 import io
 import json
 import os
 import time
-from datetime import datetime
+from collections.abc import Callable
+from datetime import date, datetime
 
+import dtc_query_client
 import requests
 import tenacity
 import xarray as xr
+from dtc_query_client.api_client import ApiClient
+from dtc_query_client.helpers import wait_for_job
 from shapely.geometry import MultiPolygon, Polygon, mapping
 
 DTC_QUERY_API_URL = "https://query.dtc-ice-sheets.org"
@@ -266,3 +272,169 @@ def _poll_for_job_completion(job_id: str) -> dict:
             raise RuntimeError(f"Job {job_id} failed or was cancelled")
         if res["status"] == "Succeeded":
             return res
+
+
+# --------------------------------------------------------------------------
+# Running jobs through the DTC Query API client
+# --------------------------------------------------------------------------
+
+#: A sink for progress lines, so a caller can route them where it likes.
+Progress = Callable[[str], None]
+
+#: How long to keep waiting for a submitted job to appear, in seconds.
+MAX_JOB_MISSING_DELAY = 300
+
+#: The key each module's output path sits under in a finished job.
+GRF_OUTPUT_KEY = "grf-module"
+FTS_OUTPUT_KEY = "main"
+DOWNLOAD_OUTPUT_KEY = "main"
+
+#: The spatial filter the download endpoint requires, for a dataset where there
+#: is nothing for a tighter polygon to select (every Use Case 1 collection, for
+#: example, covers the Watson catchment and nothing else).
+WHOLE_WORLD = {
+    "type": "Polygon",
+    "coordinates": [[[-180.0, -90.0], [180.0, -90.0], [180.0, 90.0],
+                     [-180.0, 90.0], [-180.0, -90.0]]],
+}
+
+
+async def run_grf_job(api_client: ApiClient, dataset_name: str, start_date: str = "2006-01-01",
+                      end_date: str = "2026-01-01", grid_res_x: int = 100,
+                      grid_res_y: int = 100, progress: Progress = print) -> str:
+    """
+    Fit the GRF module to a published dataset through the Query API.
+
+    Parameters
+    ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
+    dataset_name : str
+        A Use Case 1 collection, e.g. ``UC1_WATSON_RUNOFF_INPUT_RACMO55``.
+    start_date, end_date : str, optional
+        Time window, as ISO dates. The default spans the whole record.
+    grid_res_x, grid_res_y : int, optional
+        Resolution of the regular grid the fitted field is returned on.
+    progress : callable, optional
+        Called with a line of progress. `print` by default.
+
+    Returns
+    -------
+    str
+        URL of the GeoZarr the job wrote, holding the harmonised field.
+    """
+    api = dtc_query_client.api.HydropowerApi(api_client)
+    request = dtc_query_client.models.HydropowerGaussianRandomFieldRequest(
+        start_date=start_date,
+        end_date=end_date,
+        dataset_name=dataset_name,
+        grid_res_x=grid_res_x,
+        grid_res_y=grid_res_y,
+    )
+    progress(f"GRF: submitting {dataset_name} ...")
+    submitted = await api.submit_grf_job(request)
+    progress(f"GRF: job {submitted.job_id}, waiting (a cached run returns in seconds)")
+    result = await wait_for_job(api_client, submitted.job_id,
+                                max_job_missing_delay=MAX_JOB_MISSING_DELAY)
+    geozarr_url = result.outputs[GRF_OUTPUT_KEY]["output_path"]
+    progress("GRF: done")
+    return geozarr_url
+
+
+async def run_fts_job(api_client: ApiClient, grf_geozarr_url: str, curve_time_points: int = 5, num_pca: int = 2,
+                      num_factors: int = 3, progress: Progress = print) -> str:
+    """
+    Run the FTS module over a harmonised field through the Query API.
+
+    Parameters
+    ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
+    grf_geozarr_url : str
+        URL of a GRF job's GeoZarr, as :func:`run_grf_job` returns it.
+    curve_time_points : int, optional
+        Timesteps treated as one curve. Five, one per melt-season month.
+    num_pca, num_factors : int, optional
+        Components and factors retained by the two reduction stages.
+    progress : callable, optional
+        Called with a line of progress. `print` by default.
+
+    Returns
+    -------
+    str
+        URL of the GeoZarr the job wrote, holding the coefficients.
+    """
+    api = dtc_query_client.api.HydropowerApi(api_client)
+    request = dtc_query_client.models.HydropowerFunctionalTimeSeriesRequest(
+        data_path=grf_geozarr_url,
+        curve_time_points=curve_time_points,
+        num_pca=num_pca,
+        num_factors=num_factors,
+    )
+    progress("FTS: submitting ...")
+    submitted = await api.submit_fts_job(request)
+    progress(f"FTS: job {submitted.job_id}, waiting")
+    result = await wait_for_job(api_client, submitted.job_id,
+                                max_job_missing_delay=MAX_JOB_MISSING_DELAY)
+    geozarr_url = result.outputs[FTS_OUTPUT_KEY]["output_path"]
+    progress("FTS: done")
+    return geozarr_url
+
+
+async def download_dataset(api_client: ApiClient, dataset_id: str, start_date: str | date,
+                           end_date: str | date,
+                           variables: list[str] | None = None,
+                           polygon: dict | Polygon | MultiPolygon | None = None,
+                           allow_multiple_files_in_output: bool = False,
+                           progress: Progress = print) -> str:
+    """
+    Fetch one published dataset through the Query API's download endpoint.
+
+    Parameters
+    ----------
+    api_client : dtc_query_client.api_client.ApiClient
+        An authenticated client.
+    dataset_id : str
+        A published dataset, e.g. ``UC1_WATSON_DISCHARGE_GAUGE``.
+    start_date, end_date : str or datetime.date
+        Time window, as dates or ISO date strings.
+    variables : list of str, optional
+        Variables to fetch. All of them by default.
+    polygon : dict or shapely.geometry.Polygon or shapely.geometry.MultiPolygon, optional
+        Spatial filter in EPSG:4326, as a shapely geometry or a GeoJSON dict.
+        :data:`WHOLE_WORLD` by default.
+    allow_multiple_files_in_output : bool, optional
+        For datasets stored in more than one coordinate system: True returns a
+        folder holding one GeoZarr per system, False (the default) keeps only
+        the largest.
+    progress : callable, optional
+        Called with a line of progress.
+
+    Returns
+    -------
+    str
+        URL of the GeoZarr the job wrote.
+    """
+    if polygon is None:
+        geojson = WHOLE_WORLD
+    elif isinstance(polygon, dict):
+        geojson = polygon
+    else:
+        geojson = mapping(polygon)
+    api = dtc_query_client.api.GenericApi(api_client)
+    request = dtc_query_client.models.DataDownloadRequest(
+        dataset_id=dataset_id,
+        start_time=start_date,
+        end_time=end_date,
+        epsg4326_polygon_json=dtc_query_client.models.Epsg4326PolygonJson.from_dict(geojson),
+        variables=variables,
+        allow_multiple_files_in_output=allow_multiple_files_in_output,
+    )
+    progress(f"download: submitting {dataset_id} ...")
+    submitted = await api.download_data(request)
+    progress(f"download: job {submitted.job_id}, waiting")
+    result = await wait_for_job(api_client, submitted.job_id,
+                                max_job_missing_delay=MAX_JOB_MISSING_DELAY)
+    geozarr_url = result.outputs[DOWNLOAD_OUTPUT_KEY]["output_path"]
+    progress("download: done")
+    return geozarr_url
