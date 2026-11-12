@@ -36,6 +36,8 @@ scipy = "^1.18.1"
 seaborn = "^0.13.2"
 ipympl = "^0.10.0"
 fsspec = "^2026.9.0"
+prov = {extras = ["dot"], version = "^3.3.0"}
+graphviz = "^0.21"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.2"
