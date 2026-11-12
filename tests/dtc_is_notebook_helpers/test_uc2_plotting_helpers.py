@@ -181,3 +181,46 @@ def test_plot_slr_location_four_panels_invalid_location(example_annual_slr_datas
                 lat0=lat0,
                 lon0=lon0,
             )
+
+
+@pytest.fixture
+def masked_slr_dataset() -> xr.Dataset:
+    # 3x3 grid (y: -10, 0, 10; x: -10, 0, 10) where only the cells in column x=10 hold data
+    data = np.full((2, 3, 3), np.nan)
+    data[:, :, 2] = 1.0
+    return xr.Dataset(
+        {"sdot": (("time", "y", "x"), data)},
+        coords={"time": [0, 1], "y": [-10.0, 0.0, 10.0], "x": [-10.0, 0.0, 10.0]},
+    )
+
+
+@pytest.mark.parametrize(
+    "lat0, lon0, expected_lat, expected_lon, expected_requested_valid",
+    [
+        (0.0, 10.0, 0.0, 10.0, True),
+        (0.0, 0.0, 0.0, 10.0, False),
+        (-9.0, -9.0, -10.0, 10.0, False),
+    ],
+    ids=["requested-cell-valid", "masked-redirects-to-neighbour", "masked-corner-redirects"],
+)
+def test_find_nearest_valid_cell_selects_nearest_non_nan_cell(
+    masked_slr_dataset: xr.Dataset, lat0, lon0, expected_lat, expected_lon, expected_requested_valid
+):
+    lat, lon, dist_km, requested_valid = uc2_plotting_helpers.find_nearest_valid_cell(masked_slr_dataset, lat0, lon0)
+    assert (lat, lon) == (expected_lat, expected_lon)
+    assert requested_valid is expected_requested_valid
+    assert (dist_km == pytest.approx(0.0)) is expected_requested_valid
+
+
+def test_find_nearest_valid_cell_handles_longitude_wraparound(masked_slr_dataset: xr.Dataset):
+    # -179 is 11 degrees from 170 across the antimeridian, so 170 is the nearest valid cell
+    ds = masked_slr_dataset.assign_coords(x=[-170.0, 0.0, 170.0])
+    ds["sdot"][:, :, 1] = 1.0  # x=0 is also valid, and closer than 170 if wraparound were ignored
+    _, lon, _, _ = uc2_plotting_helpers.find_nearest_valid_cell(ds, 0.0, -179.0)
+    assert lon == 170.0
+
+
+def test_find_nearest_valid_cell_no_spatial_variable_raises():
+    ds = xr.Dataset({"sdot": (("time",), [1.0, 2.0])}, coords={"time": [0, 1]})
+    with pytest.raises(ValueError, match="y/x"):
+        uc2_plotting_helpers.find_nearest_valid_cell(ds, 0.0, 0.0)
