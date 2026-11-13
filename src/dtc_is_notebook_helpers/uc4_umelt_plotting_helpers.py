@@ -24,21 +24,36 @@ logger = logging.getLogger(__name__)
 # How each product is drawn: variable in the dataset, titles, units, colours.
 UMELT_PRODUCTS = {
     "ssmis": {
-        "var": "brightness_temperature", "name": "SSMIS", "unit": "K", "ylabel": "SSMIS brightness<br>temperature [K]",
-        "colorscale": "RdPu", "reverse": False, "line": "#FF6B6B", "fixed_range": None,
+        "var": "brightness_temperature",
+        "name": "SSMIS",
+        "unit": "K",
+        "ylabel": "SSMIS brightness<br>temperature [K]",
+        "colorscale": "RdPu",
+        "reverse": False,
+        "line": "#FF6B6B",
+        "fixed_range": None,
     },
     "ascat": {
-        "var": "surface_backwards_scattering_coefficient_of_radar_wave", "name": "ASCAT", "unit": "dB",
+        "var": "surface_backwards_scattering_coefficient_of_radar_wave",
+        "name": "ASCAT",
+        "unit": "dB",
         "ylabel": "ASCAT backscatter<br>coefficient [dB]",
-        "colorscale": "Viridis", "reverse": True, "line": "#30B64A", "fixed_range": None,
+        "colorscale": "Viridis",
+        "reverse": True,
+        "line": "#30B64A",
+        "fixed_range": None,
     },
     "umelt": {
-        "var": "melt", "name": "UMelt", "unit": "melt presence", "ylabel": "UMelt mean<br>melt presence",
-        "colorscale": "Bluered", "reverse": False, "line": "#45B7D1",
+        "var": "melt",
+        "name": "UMelt",
+        "unit": "melt presence",
+        "ylabel": "UMelt mean<br>melt presence",
+        "colorscale": "Bluered",
+        "reverse": False,
+        "line": "#45B7D1",
         "fixed_range": (0.0, 1.0),
     },
 }
-
 
 
 def get_date_picker(desc: str = "Select a date:", default_date: date = date(2018, 1, 1)) -> widgets.DatePicker:
@@ -48,17 +63,17 @@ def get_date_picker(desc: str = "Select a date:", default_date: date = date(2018
         min=date(2016, 1, 1),
         max=date(2021, 12, 31),
         description=desc,
-        style={"description_width": "initial"}
+        style={"description_width": "initial"},
     )
 
 
 async def submit_data_download(
-        client: ApiClient,
-        dataset_id: DatasetID,
-        start_time: datetime,
-        end_time: datetime,
-        epsg4326_polygon: Polygon | MultiPolygon,
-        variables: list[str] | None = None
+    client: ApiClient,
+    dataset_id: DatasetID,
+    start_time: datetime,
+    end_time: datetime,
+    epsg4326_polygon: Polygon | MultiPolygon,
+    variables: list[str] | None = None,
 ) -> str:
     """
     Submit a data download job to the DTC Query API and return the job ID.
@@ -116,7 +131,7 @@ async def run_data_download(
     except RuntimeError:
         logger.exception("Data download job %s failed", job_id)
         raise
-    print(f"Data download job {job_id} completed successfully.") # noqa: T201
+    print(f"Data download job {job_id} completed successfully.")  # noqa: T201
     return result.outputs["main"]["output_path"]
 
 
@@ -135,8 +150,9 @@ def _make_map(use_esri: bool) -> Map:
         base, crs = basemaps.Esri.AntarcticBasemap, projections.EPSG3031.ESRIBasemap
     else:
         base, crs = basemaps.NASAGIBS.BlueMarble3031, projections.EPSG3031.NASAGIBS
-    m = Map(center=(-90, 0), zoom=1, crs=crs, basemap=base, scroll_wheel_zoom=True,
-            layout=widgets.Layout(height="650px"))
+    m = Map(
+        center=(-90, 0), zoom=1, crs=crs, basemap=base, scroll_wheel_zoom=True, layout=widgets.Layout(height="650px")
+    )
     m.add_control(ScaleControl(position="bottomleft"))
     m.add_control(FullScreenControl())
     return m
@@ -148,8 +164,12 @@ def _make_draw_control() -> DrawControl:
     return DrawControl(
         polygon={"shapeOptions": shape_style, "allowIntersection": False},
         rectangle={"shapeOptions": shape_style},
-        polyline={}, circle={}, circlemarker={}, marker={},
-        edit=True, remove=True,
+        polyline={},
+        circle={},
+        circlemarker={},
+        marker={},
+        edit=True,
+        remove=True,
     )
 
 
@@ -328,9 +348,9 @@ def _reference_times(products: dict, max_steps: int) -> pd.DatetimeIndex:
     return ref
 
 
-def _as_of(ref_times: pd.DatetimeIndex,
-           src_times: pd.DatetimeIndex,
-           max_age: pd.Timedelta) -> tuple[np.ndarray, np.ndarray]:
+def _as_of(
+    ref_times: pd.DatetimeIndex, src_times: pd.DatetimeIndex, max_age: pd.Timedelta
+) -> tuple[np.ndarray, np.ndarray]:
     """Find the latest source time at or before it for each reference time frame.
 
     Returns (position in src_times, age). The position is -1 where there is no observation within `max_age`.
@@ -407,9 +427,12 @@ def _make_figure_skeleton(names: list[str]) -> go.Figure:
     """Make the skeleton of the figure with 3 maps on top, then one full-width time-series row per product."""
     full_row = [{"colspan": 3}, None, None]
     return make_subplots(
-        rows=4, cols=3,
+        rows=4,
+        cols=3,
         specs=[[{}, {}, {}], full_row, full_row, full_row],
-        row_heights=[0.45, 0.18, 0.18, 0.19], vertical_spacing=0.065, horizontal_spacing=0.09,
+        row_heights=[0.45, 0.18, 0.18, 0.19],
+        vertical_spacing=0.065,
+        horizontal_spacing=0.09,
         subplot_titles=names + ["", "", ""],
     )
 
@@ -419,13 +442,15 @@ def _add_map_traces(fig: go.Figure, shown: dict) -> None:
     for col, (key, s) in enumerate(shown.items(), start=1):
         spec = UMELT_PRODUCTS[key]
         hover = f"x %{{x:.1f}} km<br>y %{{y:.1f}} km<br>%{{z:.3g}} {spec['unit']}<extra>{spec['name']}</extra>"
-        heatmap = go.Heatmap(x=s.x, y=s.y, z=s.map_at(0), coloraxis=f"coloraxis{_suffix(col)}",
-                             hoverongaps=False, hovertemplate=hover)
+        heatmap = go.Heatmap(
+            x=s.x, y=s.y, z=s.map_at(0), coloraxis=f"coloraxis{_suffix(col)}", hoverongaps=False, hovertemplate=hover
+        )
         fig.add_trace(heatmap, row=1, col=col)
 
 
-def _add_series_traces(fig: go.Figure, products: dict, shown: dict, ranges: dict, first_time: pd.Timestamp,
-                       gap: pd.Timedelta) -> None:
+def _add_series_traces(
+    fig: go.Figure, products: dict, shown: dict, ranges: dict, first_time: pd.Timestamp, gap: pd.Timedelta
+) -> None:
     """Add series for traces 3-11.
 
     It includes the regional-mean lines, then the observation dots, then the red time lines.
@@ -435,18 +460,34 @@ def _add_series_traces(fig: go.Figure, products: dict, shown: dict, ranges: dict
     for key, p in products.items():
         spec, s = UMELT_PRODUCTS[key], shown[key]
         t, v = _break_gaps(p.times[p.valid], p.mean[p.valid], gap)
-        lines.append(go.Scatter(
-            x=t, y=v, mode="lines", line={"color": spec["line"], "width": 1.4}, connectgaps=False,
-            hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.3g}<extra>" + spec["name"] + "</extra>",
-        ))
-        dots.append(go.Scatter(
-            x=[s.obs_time[0]], y=[s.obs_value[0]], mode="markers", hoverinfo="skip",
-            marker={**dot_style, "color": spec["line"]},
-        ))
-        time_lines.append(go.Scatter(
-            x=[first_time] * 2, y=list(ranges[key]), mode="lines", hoverinfo="skip",
-            line={"color": "red", "width": 1.2, "dash": "dot"},
-        ))
+        lines.append(
+            go.Scatter(
+                x=t,
+                y=v,
+                mode="lines",
+                line={"color": spec["line"], "width": 1.4},
+                connectgaps=False,
+                hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.3g}<extra>" + spec["name"] + "</extra>",
+            )
+        )
+        dots.append(
+            go.Scatter(
+                x=[s.obs_time[0]],
+                y=[s.obs_value[0]],
+                mode="markers",
+                hoverinfo="skip",
+                marker={**dot_style, "color": spec["line"]},
+            )
+        )
+        time_lines.append(
+            go.Scatter(
+                x=[first_time] * 2,
+                y=list(ranges[key]),
+                mode="lines",
+                hoverinfo="skip",
+                line={"color": "red", "width": 1.2, "dash": "dot"},
+            )
+        )
     for group in (lines, dots, time_lines):
         for row, trace in enumerate(group, start=2):
             fig.add_trace(trace, row=row, col=1)
@@ -459,12 +500,19 @@ def _add_colorbar_keepers(fig: go.Figure, shown: dict, limits: dict) -> None:
     (opacity 0: nothing is drawn, no hover).
     """
     for col, (key, s) in enumerate(shown.items(), start=1):
-        keeper = go.Heatmap(x=[s.x[0], s.x[0] + 1e-3], y=[s.y[0]], z=[list(limits[key])], opacity=0, hoverinfo="skip",
-                            coloraxis=f"coloraxis{_suffix(col)}")
+        keeper = go.Heatmap(
+            x=[s.x[0], s.x[0] + 1e-3],
+            y=[s.y[0]],
+            z=[list(limits[key])],
+            opacity=0,
+            hoverinfo="skip",
+            coloraxis=f"coloraxis{_suffix(col)}",
+        )
         fig.add_trace(keeper, row=1, col=col)
 
 
 # Titles and animation frames
+
 
 def _map_title(key: str, s: _Shown, step: int, max_age: pd.Timedelta) -> str:
     """Define the title of a map for a slider step."""
@@ -492,14 +540,19 @@ def _make_frames(fig: go.Figure, shown: dict, ref_times: pd.DatetimeIndex, max_a
         dots = [go.Scatter(x=[s.obs_time[step]], y=[s.obs_value[step]]) for s in shown.values()]
         time_lines = [go.Scatter(x=[ref_times[step]] * 2) for _ in shown]
         titles = [_map_title(key, s, step, max_age) for key, s in shown.items()]
-        frames.append(go.Frame(
-            name=str(step), traces=ANIMATED_TRACES, data=maps + dots + time_lines,
-            layout={"annotations": _annotations_with_titles(base, titles)},
-        ))
+        frames.append(
+            go.Frame(
+                name=str(step),
+                traces=ANIMATED_TRACES,
+                data=maps + dots + time_lines,
+                layout={"annotations": _annotations_with_titles(base, titles)},
+            )
+        )
     return frames
 
 
 # Axes, colour bars, slider
+
 
 def _padded_range(coords: np.ndarray) -> list[float]:
     """Compute the axes range."""
@@ -513,8 +566,9 @@ def _style_axes(fig: go.Figure, shown: dict, ranges: dict) -> None:
     # the axis range and collapse the panel.
     for col, s in enumerate(shown.values(), start=1):
         fig.update_xaxes(title_text="x [km]", constrain="domain", range=_padded_range(s.x), row=1, col=col)
-        fig.update_yaxes(scaleanchor="x" + _suffix(col), scaleratio=1, constrain="domain",
-                         range=_padded_range(s.y), row=1, col=col)
+        fig.update_yaxes(
+            scaleanchor="x" + _suffix(col), scaleratio=1, constrain="domain", range=_padded_range(s.y), row=1, col=col
+        )
     fig.update_yaxes(title_text="y [km]", row=1, col=1)
 
     for row, key in enumerate(shown, start=2):
@@ -532,9 +586,18 @@ def _coloraxes(fig: go.Figure, limits: dict) -> dict:
         spec = UMELT_PRODUCTS[key]
         x_right = fig.layout["xaxis" + _suffix(col)].domain[1]
         coloraxes["coloraxis" + _suffix(col)] = {
-            "colorscale": spec["colorscale"], "reversescale": spec["reverse"], "cmin": cmin, "cmax": cmax,
-            "colorbar": {"title": {"text": spec["unit"]}, "x": x_right + 0.005, "xanchor": "left",
-                         "y": sum(y_dom) / 2, "len": 0.8 * (y_dom[1] - y_dom[0]), "thickness": 12},
+            "colorscale": spec["colorscale"],
+            "reversescale": spec["reverse"],
+            "cmin": cmin,
+            "cmax": cmax,
+            "colorbar": {
+                "title": {"text": spec["unit"]},
+                "x": x_right + 0.005,
+                "xanchor": "left",
+                "y": sum(y_dom) / 2,
+                "len": 0.8 * (y_dom[1] - y_dom[0]),
+                "thickness": 12,
+            },
         }
     return coloraxes
 
@@ -545,7 +608,10 @@ def _slider(ref_times: pd.DatetimeIndex) -> dict:
     labels = ref_times.strftime("%Y-%m-%d" if only_dates else "%Y-%m-%d %H:%M")
     steps = [{"method": "animate", "label": label, "args": [[str(i)], _ANIMATE_NOW]} for i, label in enumerate(labels)]
     slider = {
-        "active": 0, "pad": {"t": 70}, "x": 0.12, "len": 0.88,
+        "active": 0,
+        "pad": {"t": 70},
+        "x": 0.12,
+        "len": 0.88,
         "currentvalue": {"prefix": "Time: ", "font": {"size": 14, "color": "#2a3f5f"}},
         "steps": steps,
     }
@@ -560,11 +626,16 @@ def _play_buttons() -> dict:
     play = {"frame": {"duration": 150, "redraw": True}, "fromcurrent": True, "transition": {"duration": 0}}
     pause = {"frame": {"duration": 0, "redraw": False}, "mode": "immediate", "transition": {"duration": 0}}
     return {
-        "type": "buttons", "direction": "left", "x": 0.0, "y": -0.145, "showactive": False,
-        "buttons": [{"label": "Play", "method": "animate", "args": [None, play]},
-                    {"label": "Pause", "method": "animate", "args": [[None], pause]}],
+        "type": "buttons",
+        "direction": "left",
+        "x": 0.0,
+        "y": -0.145,
+        "showactive": False,
+        "buttons": [
+            {"label": "Play", "method": "animate", "args": [None, play]},
+            {"label": "Pause", "method": "animate", "args": [[None], pause]},
+        ],
     }
-
 
 
 def build_umelt_explorer(
@@ -631,7 +702,9 @@ def build_umelt_explorer(
     _style_axes(fig, shown, ranges)
     fig.update_layout(
         **_coloraxes(fig, limits),
-        template="plotly_white", height=height, showlegend=False,
+        template="plotly_white",
+        height=height,
+        showlegend=False,
         margin={"t": 100, "b": 200, "l": 80, "r": 120},
         meta={"reference": "union", "steps": len(ref_times), "coarsen": {key: p.k for key, p in products.items()}},
         sliders=[_slider(ref_times)],
