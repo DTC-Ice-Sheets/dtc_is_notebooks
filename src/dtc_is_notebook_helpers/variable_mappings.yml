@@ -499,7 +499,7 @@ SEANOE_SOUTHERN_OCEAN_TEMPERATURE_AND_SALINITY_PROFILES:
   region: "ocean"
   variables:
     sea_water_conservative_temperature:
-      units: "°K"
+      units: "K"
       timeseries_type: "derivative"
       measurement_uncertainties: null
       measurement_uncertainty_type: null
