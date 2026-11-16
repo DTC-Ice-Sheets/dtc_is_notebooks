@@ -673,6 +673,7 @@ def plot_antarctica_panel(data: xr.DataArray, title: str, cmap: str, figsize: tu
     )
     ax.coastlines("10m")
     ax.gridlines(draw_labels=False)
+    title = title + " - " + data.time.values.astype(str)
     ax.set_title(title, fontsize=16)
     plt.tight_layout()
     plt.show()
