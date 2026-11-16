@@ -382,6 +382,26 @@ RACMO:
       label: "Volume Change"
       y_axis_label: ""
 
+ANTARCTICA_SUBGLACIAL_LAKES:
+  description: "Antarctica wide Subglacial Lakes dataset."
+  label: "Antarctica Subglacial Lakes - Antarctica wide"
+  region: "ice_shelf"
+  variables:
+    rate_of_volume_change:
+      units: "m3 yr-1"
+      timeseries_type: "derivative"
+      measurement_uncertainties: null
+      measurement_uncertainty_type: null
+      label: "Rate of Volume Change"
+      y_axis_label: ""
+    volume_change:
+      units: "m3 yr-1"
+      timeseries_type: "derivative"
+      measurement_uncertainties: "volume_change_uncertainties"
+      measurement_uncertainty_type: "std"
+      label: "Volume Change"
+      y_axis_label: ""
+
 4D_ANTARCTICA_SURFACE_MELT_MAPS:
   description: "Daily Surface Melt Maps dataset."
   label: "Daily Surface Melt Maps (Picard et al. 2006)"
