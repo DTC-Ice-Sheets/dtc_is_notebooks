@@ -75,6 +75,35 @@ def test_as_of_takes_the_latest_observation_within_max_age():
     assert pd.Timedelta(age[4]) == pd.Timedelta("7D")
 
 
+@pytest.fixture
+def make_product():
+    """Return a function making a product from its times and which of them hold data."""
+
+    def make(times: list[str], valid: list[bool]) -> h._Product:
+        da = xr.DataArray(np.zeros((len(times), 1, 1)), dims=("time", "y", "x"))
+        return h._Product(
+            da=da, times=pd.DatetimeIndex(times), mean=np.zeros(len(times)), valid=np.array(valid, dtype=bool), k=1
+        )
+
+    return make
+
+
+def test_reference_times_are_the_sorted_unique_valid_times(make_product):
+    """Test that the slider times are the times holding data in any product, without duplicates."""
+    products = {
+        "ssmis": make_product(["2018-01-03", "2018-01-01"], [True, True]),
+        "ascat": make_product(["2018-01-01", "2018-01-02"], [True, False]),
+    }
+    assert list(h._reference_times(products, max_steps=10)) == list(pd.DatetimeIndex(["2018-01-01", "2018-01-03"]))
+
+
+def test_reference_times_raises_when_no_product_has_data(make_product):
+    """Test that a clear error is raised instead of an IndexError later on when nothing holds data."""
+    products = {"ssmis": make_product(["2018-01-01"], [False]), "ascat": make_product([], [])}
+    with pytest.raises(ValueError, match="No SSMIS, ASCAT or UMelt data"):
+        h._reference_times(products, max_steps=10)
+
+
 def test_break_gaps_inserts_nan_in_long_holes_only():
     """Test that a NaN is inserted in the middle of holes longer than `gap`, and nowhere else."""
     times = pd.DatetimeIndex(["2018-01-01", "2018-01-02", "2018-01-12"])

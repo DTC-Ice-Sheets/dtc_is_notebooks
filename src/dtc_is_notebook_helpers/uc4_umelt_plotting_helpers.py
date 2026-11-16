@@ -271,6 +271,8 @@ def _prepare_product(ds: xr.Dataset, spec: dict, max_cells: int) -> _Product:
 def _reference_times(products: dict, max_steps: int) -> pd.DatetimeIndex:
     """Define the time axis that drives the slider."""
     ref = pd.DatetimeIndex(np.concatenate([p.times[p.valid] for p in products.values()])).unique().sort_values()
+    if len(ref) == 0:
+        raise ValueError("No SSMIS, ASCAT or UMelt data in the selected area and period.")
     if len(ref) > max_steps:  # keep the figure light: evenly spaced subset
         ref = ref[np.unique(np.linspace(0, len(ref) - 1, max_steps).round().astype(int))]
     return ref
@@ -641,9 +643,7 @@ def build_umelt_explorer(
     return fig
 
 
-def plot_antarctica_panel(
-    data: xr.DataArray, title: str, cmap: str, figsize: tuple[float, float] = (7, 7)
-) -> None:
+def plot_antarctica_panel(data: xr.DataArray, title: str, cmap: str, figsize: tuple[float, float] = (7, 7)) -> None:
     """
     Plot one product over the whole of Antarctica, then close the figure to free its memory.
 
