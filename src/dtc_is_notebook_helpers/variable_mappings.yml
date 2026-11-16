@@ -383,7 +383,7 @@ RACMO:
       y_axis_label: ""
 
 ANTARCTICA_SUBGLACIAL_LAKES:
-  description: "Antarctica wide Antarctica Subglacial Lakes dataset."
+  description: "Antarctica wide Subglacial Lakes dataset."
   label: "Antarctica Subglacial Lakes - Antarctica wide"
   region: "ice_shelf"
   variables:
