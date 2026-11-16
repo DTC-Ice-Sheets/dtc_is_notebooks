@@ -156,7 +156,7 @@ def test_plot_antarctica_panel_shows_and_closes_the_map(monkeypatch):
     monkeypatch.setattr(h.plt, "show", lambda: shown.append(h.plt.gcf()))
     data = xr.DataArray(
         np.arange(6.0).reshape(2, 3, 1), dims=("y", "x", "time"), coords={"y": [-1.0e6, -1.1e6],
-                                                                        "x": [0.0, 1.0e5, 2.0e5], 
+                                                                        "x": [0.0, 1.0e5, 2.0e5],
                                                                         "time": np.datetime64("2023-01-01")}
     )
 
