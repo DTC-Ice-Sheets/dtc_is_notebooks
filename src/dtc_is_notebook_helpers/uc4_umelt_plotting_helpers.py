@@ -1,25 +1,19 @@
 """Helper functions for plotting UMelt data."""
 
 import json
-import logging
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 
 import ipywidgets as widgets
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import xarray as xr
-from dtc_query_client import ApiClient, DataDownloadRequest, DatasetID, Epsg4326PolygonJson, GenericApi
-from dtc_query_client.helpers import wait_for_job
 from ipyleaflet import DrawControl, FullScreenControl, Map, ScaleControl, basemaps, projections
 from plotly.subplots import make_subplots
 from pyproj import Transformer
-from shapely.geometry import MultiPolygon, Polygon, mapping, shape
+from shapely.geometry import Polygon, mapping, shape
 from shapely.ops import transform
-
-# Set up logger for this module
-logger = logging.getLogger(__name__)
 
 # How each product is drawn: variable in the dataset, titles, units, colours.
 UMELT_PRODUCTS = {
@@ -65,74 +59,6 @@ def get_date_picker(desc: str = "Select a date:", default_date: date = date(2018
         description=desc,
         style={"description_width": "initial"},
     )
-
-
-async def submit_data_download(
-    client: ApiClient,
-    dataset_id: DatasetID,
-    start_time: datetime,
-    end_time: datetime,
-    epsg4326_polygon: Polygon | MultiPolygon,
-    variables: list[str] | None = None,
-) -> str:
-    """
-    Submit a data download job to the DTC Query API and return the job ID.
-
-    Parameters
-    ----------
-    dataset_id: DatasetID
-        The ID of the dataset to download.
-    start_time: datetime
-        The start time of the data range to download.
-    end_time: datetime
-        The end time of the data range to download.
-    epsg4326_polygon: Polygon | MultiPolygon
-        The polygon in EPSG:4326 coordinates to define the area of interest.
-    variables: list[str] | None
-        The list of variables to download. If None, all variables are downloaded.
-
-    Returns
-    -------
-    str
-        The job ID of the submitted data download job.
-    """
-    response = await GenericApi(client).download_data(
-        DataDownloadRequest(
-            dataset_id=dataset_id,
-            start_time=start_time,
-            end_time=end_time,
-            epsg4326_polygon_json=Epsg4326PolygonJson.from_dict(mapping(epsg4326_polygon)),
-            variables=variables,
-        )
-    )
-    logger.info("Data download job started with ID: %s", response.job_id)
-    return response.job_id
-
-
-async def run_data_download(
-    client: ApiClient,
-    dataset_id: DatasetID,
-    start_time: datetime,
-    end_time: datetime,
-    epsg4326_polygon: Polygon | MultiPolygon,
-    variables: list[str] | None = None,
-) -> str:
-    """Submit a data download job to the DTC Query API and return the resulting GeoZarr URL."""
-    if end_time is None:
-        end_time = start_time + pd.Timedelta(days=7)  # Default to a 1-week range if end_time is not provided
-
-    if client is None:
-        raise ValueError("An ApiClient instance must be provided.")
-
-    job_id = await submit_data_download(client, dataset_id, start_time, end_time, epsg4326_polygon, variables)
-
-    try:
-        result = await wait_for_job(client, job_id)
-    except RuntimeError:
-        logger.exception("Data download job %s failed", job_id)
-        raise
-    print(f"Data download job {job_id} completed successfully.")  # noqa: T201
-    return result.outputs["main"]["output_path"]
 
 
 # Equal-area projection for South Polar region (EASE-Grid 2.0 South) used for area calculation
