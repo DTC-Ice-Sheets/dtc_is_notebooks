@@ -155,14 +155,16 @@ def test_plot_antarctica_panel_shows_and_closes_the_map(monkeypatch):
     shown = []
     monkeypatch.setattr(h.plt, "show", lambda: shown.append(h.plt.gcf()))
     data = xr.DataArray(
-        np.arange(6.0).reshape(2, 3), dims=("y", "x"), coords={"y": [-1.0e6, -1.1e6], "x": [0.0, 1.0e5, 2.0e5]}
+        np.arange(6.0).reshape(2, 3, 1), dims=("y", "x", "time"), coords={"y": [-1.0e6, -1.1e6],
+                                                                        "x": [0.0, 1.0e5, 2.0e5], 
+                                                                        "time": np.datetime64("2023-01-01")}
     )
 
     h.plot_antarctica_panel(data, "SSMIS", "RdPu", figsize=(5, 5))
 
     (fig,) = shown
     ax = fig.axes[0]
-    assert ax.get_title() == "SSMIS"
+    assert ax.get_title() == "SSMIS - 2023-01-01T00:00:00"
     assert tuple(fig.get_size_inches()) == (5, 5)
     mesh = ax.collections[0]
     assert (mesh.norm.vmin, mesh.norm.vmax) == (0.0, 5.0)
