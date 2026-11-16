@@ -4,7 +4,9 @@ import json
 from dataclasses import dataclass
 from datetime import date
 
+import cartopy.crs as ccrs
 import ipywidgets as widgets
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -499,7 +501,7 @@ def _style_axes(fig: go.Figure, shown: dict, ranges: dict) -> None:
 
     for row, key in enumerate(shown, start=2):
         fig.update_yaxes(title_text=UMELT_PRODUCTS[key]["ylabel"], range=ranges[key], row=row, col=1)
-        fig.update_xaxes(matches="x4", showticklabels=(row == 4), row=row, col=1)  # noqa: PLR2004
+        fig.update_xaxes(matches="x4", showticklabels=(row == 4), row=row, col=1)
     fig.update_yaxes(range=[0, max(ranges["umelt"][1], 1e-3)], row=4, col=1)  # a melt fraction cannot be negative
     fig.update_xaxes(title_text="Time", row=4, col=1)
 
@@ -541,7 +543,7 @@ def _slider(ref_times: pd.DatetimeIndex) -> dict:
         "currentvalue": {"prefix": "Time: ", "font": {"size": 14, "color": "#2a3f5f"}},
         "steps": steps,
     }
-    if len(ref_times) > 25:  # noqa: PLR2004
+    if len(ref_times) > 25:
         # with many steps the tick labels would overlap: hide them, the current value is shown above the slider
         slider.update({"font": {"color": "rgba(0,0,0,0)"}, "ticklen": 0, "tickcolor": "rgba(0,0,0,0)"})
     return slider
@@ -637,3 +639,41 @@ def build_umelt_explorer(
         updatemenus=[_play_buttons()],
     )
     return fig
+
+
+def plot_antarctica_panel(
+    data: xr.DataArray, title: str, cmap: str, figsize: tuple[float, float] = (7, 7)
+) -> None:
+    """
+    Plot one product over the whole of Antarctica, then close the figure to free its memory.
+
+    Parameters
+    ----------
+    data : xr.DataArray
+        The 2D field to plot, with ``x`` and ``y`` coordinates.
+    title : str
+        The title of the map.
+    cmap : str
+        The matplotlib colour map.
+    figsize : tuple[float, float], optional
+        The size of the figure in inches. Default is (7, 7).
+    """
+    map_proj = ccrs.SouthPolarStereo(central_longitude=0.0)
+    fig, ax = plt.subplots(figsize=figsize, subplot_kw={"projection": map_proj})
+    vmin, vmax = float(data.min().compute()), float(data.max().compute())
+    data.plot(
+        ax=ax,
+        x="x",
+        y="y",
+        transform=ccrs.SouthPolarStereo(),
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        cbar_kwargs={"shrink": 0.9, "orientation": "horizontal"},
+    )
+    ax.coastlines("10m")
+    ax.gridlines(draw_labels=False)
+    ax.set_title(title, fontsize=16)
+    plt.tight_layout()
+    plt.show()
+    plt.close(fig)

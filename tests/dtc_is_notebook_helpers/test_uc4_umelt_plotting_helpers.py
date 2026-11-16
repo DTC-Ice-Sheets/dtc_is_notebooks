@@ -7,6 +7,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 from shapely.geometry import Polygon, box
 
 from dtc_is_notebook_helpers import uc4_umelt_plotting_helpers as h
@@ -115,3 +116,26 @@ def test_series_range(values, expected):
 def test_padded_range(coords, expected):
     """Test that the axis range runs from the outer cell edges (half a cell beyond the outermost centres)."""
     assert h._padded_range(coords) == pytest.approx(expected)
+
+
+def test_plot_antarctica_panel_shows_and_closes_the_map(monkeypatch):
+    """Test that the map is shown with its title, size and colour limits, and closed afterwards."""
+    from cartopy.mpl.geoaxes import GeoAxes
+
+    monkeypatch.setattr(GeoAxes, "coastlines", lambda self, *a, **k: None)  # avoid downloading Natural Earth
+    shown = []
+    monkeypatch.setattr(h.plt, "show", lambda: shown.append(h.plt.gcf()))
+    data = xr.DataArray(
+        np.arange(6.0).reshape(2, 3), dims=("y", "x"), coords={"y": [-1.0e6, -1.1e6], "x": [0.0, 1.0e5, 2.0e5]}
+    )
+
+    h.plot_antarctica_panel(data, "SSMIS", "RdPu", figsize=(5, 5))
+
+    (fig,) = shown
+    ax = fig.axes[0]
+    assert ax.get_title() == "SSMIS"
+    assert tuple(fig.get_size_inches()) == (5, 5)
+    mesh = ax.collections[0]
+    assert (mesh.norm.vmin, mesh.norm.vmax) == (0.0, 5.0)
+    assert mesh.get_cmap().name == "RdPu"
+    assert not h.plt.fignum_exists(fig.number)
