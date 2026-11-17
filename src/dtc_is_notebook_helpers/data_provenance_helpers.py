@@ -57,7 +57,7 @@ def dict_to_ipy_widget(d: dict, special: list[str] | None = None) -> widgets.Wid
     return widgets.Box(
         (
             # Fix for Google Colab: it was adding `text-oveflow: ellipsis` by default, which breaks the scrolling
-            widgets.HTML("<style>div.widget-label { text-overflow: clip; }</style>"),
+            widgets.HTML("<style>div.widget-label { text-overflow: clip !important; }</style>"),
             widgets.GridBox(children=items, layout=Layout(grid_template_columns=r"min-content 1fr")),
         )
     )
