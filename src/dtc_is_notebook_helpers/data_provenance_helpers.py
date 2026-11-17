@@ -6,6 +6,9 @@ from ipywidgets import Layout, widgets
 def sanitise_for_graphviz(identifier: str) -> str:
     """Sanitise a string (e.g. PROV identifier) so it can be used as a Graphviz ID.
 
+    This removes ":" characters, which have special meaning pointing to a named port in a node.
+    They are replaced with the equivalent HTML entity "&colon;" so they still render as ":" in Jupyter notebooks.
+
     Parameters
     ----------
     identifier : str
@@ -16,7 +19,7 @@ def sanitise_for_graphviz(identifier: str) -> str:
     str
         The output string that is safe to use as a Graphviz ID.
     """
-    return str(hash(identifier))
+    return str(identifier).replace(":", "&colon;")
 
 
 def dict_to_ipy_widget(d: dict, special: list[str] | None = None) -> widgets.Widget:
@@ -51,7 +54,10 @@ def dict_to_ipy_widget(d: dict, special: list[str] | None = None) -> widgets.Wid
             )
         )
 
-    # Fix for Google Colab: it was adding `text-oveflow: ellipsis` by default, which breaks the scrolling
-    css_fix = widgets.HTML("<style>div.widget-label { text-overflow: clip; }</style>")
-
-    return widgets.GridBox(children=(css_fix, *items), layout=Layout(grid_template_columns=r"min-content 1fr"))
+    return widgets.Box(
+        (
+            # Fix for Google Colab: it was adding `text-oveflow: ellipsis` by default, which breaks the scrolling
+            widgets.HTML("<style>div.widget-label { text-overflow: clip; }</style>"),
+            widgets.GridBox(children=items, layout=Layout(grid_template_columns=r"min-content 1fr")),
+        )
+    )
