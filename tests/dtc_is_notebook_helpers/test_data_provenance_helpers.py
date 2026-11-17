@@ -1,3 +1,5 @@
+"""Tests for the data provenance notebook."""
+
 import pytest
 
 from dtc_is_notebook_helpers.data_provenance_helpers import dict_to_ipy_widget, sanitise_for_graphviz
