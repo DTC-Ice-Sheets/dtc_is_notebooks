@@ -5,9 +5,14 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
+from dtc_query_client.api_client import ApiClient
+from shapely.geometry import shape
 
 from dtc_is_notebook_helpers import api_helpers
 
@@ -158,3 +163,149 @@ def test_run_selrem_module_job_failed():
                 start_year=2000,
                 end_year=2001,
             )
+
+
+@pytest.fixture
+def mock_api_client():
+    return MagicMock(spec=ApiClient)
+
+
+# --------------------------------------------------------------------------
+# Submitting a job
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def fake_hydropower_api(monkeypatch):
+    """Stand in for the HydropowerApi, recording what it was built with and sent."""
+    seen = {}
+
+    class FakeApi:
+        def __init__(self, api_client):
+            seen["constructed_with"] = api_client
+
+        async def _submit(self, request):
+            seen["request"] = request
+            return SimpleNamespace(job_id="job-1")
+
+        submit_grf_job = submit_fts_job = _submit
+
+    monkeypatch.setattr(api_helpers.dtc_query_client.api, "HydropowerApi", FakeApi)
+    return seen
+
+
+@pytest.mark.parametrize(
+    ("submit", "api_class", "method", "output_key"),
+    [
+        (lambda c: api_helpers.run_grf_job(c, "UC1_WATSON_RUNOFF_INPUT_MAR", progress=lambda _: None),
+         "HydropowerApi", "submit_grf_job", api_helpers.GRF_OUTPUT_KEY),
+        (lambda c: api_helpers.run_fts_job(c, "https://example.org/grf.zarr", progress=lambda _: None),
+         "HydropowerApi", "submit_fts_job", api_helpers.FTS_OUTPUT_KEY),
+        (lambda c: api_helpers.download_dataset(c, "UC1_WATSON_DISCHARGE_GAUGE", "2006-01-01", "2026-01-01",
+                                        progress=lambda _: None),
+         "GenericApi", "download_data", api_helpers.DOWNLOAD_OUTPUT_KEY),
+    ],
+    ids=["grf", "fts", "download"],
+)
+def test_run_job_submits_and_waits_through_the_given_client(monkeypatch, mock_api_client, submit, api_class,
+                                                             method, output_key):
+    seen = {}
+
+    class FakeApi:
+        def __init__(self, api_client):
+            seen["constructed_with"] = api_client
+
+        async def _submit(self, request):
+            seen["request"] = request
+            return SimpleNamespace(job_id="job-1")
+
+    setattr(FakeApi, method, FakeApi._submit)
+
+    async def fake_wait(api_client, job_id, **kwargs):  # noqa: ANN003
+        seen["awaited_with"], seen["job_id"], seen["wait_kwargs"] = api_client, job_id, kwargs
+        return SimpleNamespace(outputs={output_key: {"output_path": "out.zarr"}})
+
+    monkeypatch.setattr(api_helpers.dtc_query_client.api, api_class, FakeApi)
+    monkeypatch.setattr(api_helpers, "wait_for_job", fake_wait)
+
+    assert asyncio.run(submit(mock_api_client)) == "out.zarr"
+    assert seen["constructed_with"] is mock_api_client
+    assert seen["awaited_with"] is mock_api_client
+    assert seen["job_id"] == "job-1"
+    assert seen["wait_kwargs"] == {"max_job_missing_delay": api_helpers.MAX_JOB_MISSING_DELAY}
+
+
+# --------------------------------------------------------------------------
+# Waiting on a job
+# --------------------------------------------------------------------------
+
+def test_run_grf_job_returns_the_output_path_of_a_succeeded_job(monkeypatch, mock_api_client, fake_hydropower_api):
+    finished = SimpleNamespace(outputs={"grf-module": {"output_path": "somewhere.zarr"}})
+
+    async def fake_wait(client, job_id, **kwargs):   # noqa: ANN001, ARG001, ANN003
+        return finished
+
+    monkeypatch.setattr(api_helpers, "wait_for_job", fake_wait)
+    path = asyncio.run(api_helpers.run_grf_job(mock_api_client, "UC1_WATSON_RUNOFF_INPUT_MAR",
+                                       progress=lambda _: None))
+    assert path == "somewhere.zarr"
+
+
+def test_run_grf_job_raises_when_the_job_did_not_succeed(monkeypatch, mock_api_client, fake_hydropower_api):
+    async def fake_wait(client, job_id, **kwargs):   # noqa: ANN001, ARG001, ANN003
+        raise RuntimeError("Job failed")
+
+    monkeypatch.setattr(api_helpers, "wait_for_job", fake_wait)
+    with pytest.raises(RuntimeError, match="Job failed"):
+        asyncio.run(api_helpers.run_grf_job(mock_api_client, "UC1_WATSON_RUNOFF_INPUT_MAR",
+                                    progress=lambda _: None))
+
+
+# --------------------------------------------------------------------------
+# Fetching a published dataset
+# --------------------------------------------------------------------------
+
+def test_the_spatial_filter_is_built_in_a_form_the_endpoint_accepts():
+    """
+    The polygon field is a one-of wrapper, and handing it a plain dict leaves it unbound.
+
+    That failure is silent until the request is serialised, so it is worth pinning here
+    rather than discovering it against the deployed endpoint.
+    """
+    wrapped = api_helpers.dtc_query_client.models.Epsg4326PolygonJson.from_dict(api_helpers.WHOLE_WORLD)
+
+    assert wrapped.to_dict() == api_helpers.WHOLE_WORLD
+
+
+_SQUARE = {"type": "Polygon",
+           "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]}
+
+
+@pytest.mark.parametrize(
+    ("polygon", "expected"),
+    [(None, api_helpers.WHOLE_WORLD), (_SQUARE, _SQUARE), (shape(_SQUARE), _SQUARE)],
+    ids=["default", "geojson-dict", "shapely"],
+)
+def test_download_dataset_accepts_the_polygon_as_geojson_or_shapely(monkeypatch, mock_api_client, polygon,
+                                                                    expected):
+    seen = {}
+
+    class FakeApi:
+        def __init__(self, api_client):  # noqa: ARG002
+            pass
+
+        async def download_data(self, request):
+            seen["request"] = request
+            return SimpleNamespace(job_id="job-1")
+
+    async def fake_wait(client, job_id, **kwargs):   # noqa: ANN001, ARG001, ANN003
+        return SimpleNamespace(outputs={api_helpers.DOWNLOAD_OUTPUT_KEY: {"output_path": "out.zarr"}})
+
+    monkeypatch.setattr(api_helpers.dtc_query_client.api, "GenericApi", FakeApi)
+    monkeypatch.setattr(api_helpers, "wait_for_job", fake_wait)
+    asyncio.run(api_helpers.download_dataset(mock_api_client, "UC1_WATSON_DISCHARGE_GAUGE", "2006-01-01",
+                                     "2026-01-01", polygon=polygon, progress=lambda _: None))
+
+    sent = seen["request"].epsg4326_polygon_json.to_dict()
+    # shapely hands coordinates back as tuples; compare the numbers, not the containers.
+    assert sent["type"] == expected["type"]
+    np.testing.assert_allclose(np.asarray(sent["coordinates"]), np.asarray(expected["coordinates"]))

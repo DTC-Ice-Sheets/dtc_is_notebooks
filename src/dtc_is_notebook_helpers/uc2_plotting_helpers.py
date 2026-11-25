@@ -325,6 +325,60 @@ def _format_latlon(lat: float, lon: float) -> tuple[str, str]:
     return f"{lat_abs:.1f}°{lat_hem}", f"{lon_abs:.1f}°{lon_hem}"
 
 
+def find_nearest_valid_cell(
+    ds: xr.Dataset, lat0: float, lon0: float, lat_name: str = "y", lon_name: str = "x"
+) -> tuple[float, float, float, bool]:
+    """
+    Find the nearest grid cell that contains valid (non-NaN) data.
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset with lat/lon dimensions (other dimensions, e.g. time, are allowed).
+    lat0 : float
+        Requested latitude in degrees (-90 to +90).
+    lon0 : float
+        Requested longitude in degrees (-180 to +180).
+    lat_name : str
+        Name of latitude coordinate.
+    lon_name : str
+        Name of longitude coordinate.
+
+    Returns
+    -------
+    tuple[float, float, float, bool]
+        Latitude and longitude of the nearest valid cell, the distance to it in km,
+        and whether the requested cell was valid.
+    """
+    # A cell is valid if any data variable has at least one non-NaN value there
+    valid = None
+    for var in ds.data_vars.values():
+        if lat_name in var.dims and lon_name in var.dims:
+            other_dims = [d for d in var.dims if d not in (lat_name, lon_name)]
+            var_valid = var.notnull().any(dim=other_dims) if other_dims else var.notnull()
+            valid = var_valid if valid is None else (valid | var_valid)
+    if valid is None:
+        raise ValueError(f"No data variable with {lat_name}/{lon_name} dimensions found.")
+
+    valid = valid.transpose(lat_name, lon_name)
+    lat2d, lon2d = np.meshgrid(ds[lat_name].values, ds[lon_name].values, indexing="ij")
+
+    # Haversine distance (km); handles longitude wrap-around and 0-360 vs -180-180
+    lat1, lat2 = np.radians(lat0), np.radians(lat2d)
+    dlat = lat2 - lat1
+    dlon = np.radians(lon2d - lon0)
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+    dist_km = 2 * 6371.0 * np.arcsin(np.sqrt(a))
+
+    # Distance to the nearest cell center regardless of validity
+    i0, j0 = np.unravel_index(np.argmin(dist_km), dist_km.shape)
+    requested_cell_valid = bool(valid.values[i0, j0])
+
+    dist_km = np.where(valid.values, dist_km, np.inf)
+    i, j = np.unravel_index(np.argmin(dist_km), dist_km.shape)
+    return float(lat2d[i, j]), float(lon2d[i, j]), float(dist_km[i, j]), requested_cell_valid
+
+
 def plot_slr_location_four_panels(annual_slr_ds: xr.Dataset, lat0: float, lon0: float) -> None:
     """
     Plot sea level rise (SLR) location results in the four-panel setup.

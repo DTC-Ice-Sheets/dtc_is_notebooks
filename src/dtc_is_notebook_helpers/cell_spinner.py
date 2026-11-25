@@ -21,6 +21,9 @@ Two complementary tools are provided:
        from notebook_helpers.cell_spinner import set_message
        set_message("Downloading data...")
 
+   If the spinner is not enabled, ``set_message`` shows the text as a plain status line instead. That line is
+   cleared when the cell finishes, just like the spinner would be.
+
 2. **BusyIndicator** - a widget for work that runs in widget callbacks (e.g. ``Button.on_click``), which
    happens *after* the cell itself has completed and is therefore not covered by the cell spinner::
 
@@ -98,6 +101,28 @@ def spinner_html(message: str = DEFAULT_MESSAGE) -> str:
     return (
         f'{_CSS}<div class="nb-spinner"><div class="nb-spinner__ring"></div>'
         f'<span style="color:var(--jp-ui-font-color1,CanvasText)">{html.escape(message)}</span></div>'
+    )
+
+
+def message_html(message: str) -> str:
+    """
+    Return the HTML for a plain status message (no spinner).
+
+    Parameters
+    ----------
+    message : str
+        Text to show.
+
+    Returns
+    -------
+    str
+        Self-contained HTML snippet, or an empty string for an empty message.
+    """
+    if not message:
+        return ""
+    return (
+        f'<div class="nb-spinner-message" style="color:var(--jp-ui-font-color1,CanvasText)">'
+        f"{html.escape(message)}</div>"
     )
 
 
@@ -323,7 +348,30 @@ class _CellSpinner:
                 self._local.active = False
 
 
+class _StatusLine:
+    """Plain status message in the running cell, used by ``set_message`` while the cell spinner is not enabled."""
+
+    def __init__(self, shell: InteractiveShell) -> None:
+        self._handle: DisplayHandle | None = None
+        shell.events.register("post_run_cell", self._post_run_cell)
+
+    def set_message(self, message: str | None) -> None:
+        message = message or ""
+        bundle = {"text/html": message_html(message), "text/plain": message}
+        if self._handle is not None:
+            self._handle.update(bundle, raw=True)
+        elif message:
+            self._handle = display(bundle, raw=True, display_id=True)
+
+    def _post_run_cell(self, result: ExecutionResult | None) -> None:
+        # Clear the message when the cell finishes, like the spinner would be.
+        if self._handle is not None:
+            self._handle.update({"text/html": "", "text/plain": ""}, raw=True)
+            self._handle = None
+
+
 _spinner: _CellSpinner | None = None
+_status_line: _StatusLine | None = None
 
 
 def enable_cell_spinner(message: str = DEFAULT_MESSAGE) -> None:
@@ -378,10 +426,20 @@ def set_message(message: str | None = None) -> None:
     Parameters
     ----------
     message : str or None
-        New text. ``None`` restores the default message. Has no effect if the spinner is not enabled.
+        New text. ``None`` restores the default message. If the spinner is not enabled, the text is shown as a
+        plain status line instead (``None`` or ``""`` clears it), which is cleared when the cell finishes.
+        Has no effect outside a Jupyter kernel.
     """
+    global _status_line
     if _spinner is not None:
         _spinner.set_message(message)
+        return
+    if _status_line is None:
+        shell = get_ipython()
+        if shell is None or getattr(shell, "kernel", None) is None:
+            return
+        _status_line = _StatusLine(shell)
+    _status_line.set_message(message)
 
 
 def load_ipython_extension(shell: InteractiveShell) -> None:
@@ -424,12 +482,7 @@ class BusyIndicator(_widgets.HTML if _widgets is not None else object):
     def stop(self, message: str = "") -> None:
         """Hide the spinner, optionally leaving ``message`` in its place."""
         self.busy = False
-        self.value = (
-            f'<div class="nb-spinner-message" style="color:var(--jp-ui-font-color1,CanvasText)">'
-            f"{html.escape(message)}</div>"
-            if message
-            else ""
-        )
+        self.value = message_html(message)
 
     @contextmanager
     def __call__(

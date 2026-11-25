@@ -12,8 +12,9 @@ from dtc_is_notebook_helpers import cell_spinner
 
 
 @pytest.fixture(autouse=True)
-def reset_cell_spinner():
+def reset_cell_spinner(monkeypatch: pytest.MonkeyPatch):
     cell_spinner.disable_cell_spinner()
+    monkeypatch.setattr(cell_spinner, "_status_line", None)
     yield
     cell_spinner.disable_cell_spinner()
 
@@ -252,10 +253,92 @@ def test_suppress_cell_spinner_leaves_disabled_spinner_disabled() -> None:
     assert cell_spinner._spinner is None
 
 
-def test_set_message_is_noop_when_spinner_is_disabled() -> None:
+@pytest.fixture
+def kernel_shell(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    shell = MagicMock()
+    shell.kernel = object()
+    monkeypatch.setattr(cell_spinner, "get_ipython", lambda: shell)
+    return shell
+
+
+@pytest.fixture
+def display(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    display = MagicMock()
+    monkeypatch.setattr(cell_spinner, "display", display)
+    return display
+
+
+def test_set_message_is_noop_without_spinner_or_kernel(monkeypatch: pytest.MonkeyPatch, display: MagicMock) -> None:
+    monkeypatch.setattr(cell_spinner, "get_ipython", lambda: None)
+
     cell_spinner.set_message("Ignored")
 
-    assert cell_spinner._spinner is None
+    assert cell_spinner._status_line is None
+    display.assert_not_called()
+
+
+def test_set_message_uses_spinner_when_enabled(
+    monkeypatch: pytest.MonkeyPatch, kernel_shell: MagicMock, display: MagicMock
+) -> None:
+    spinner = MagicMock()
+    monkeypatch.setattr(cell_spinner, "_spinner", spinner)
+
+    cell_spinner.set_message("Loading")
+
+    spinner.set_message.assert_called_once_with("Loading")
+    assert cell_spinner._status_line is None
+    display.assert_not_called()
+
+
+def test_set_message_without_spinner_shows_status_line_and_clears_it_after_cell(
+    kernel_shell: MagicMock, display: MagicMock
+) -> None:
+    handle = display.return_value
+
+    cell_spinner.set_message("Downloading <data>")
+    cell_spinner.set_message("Processing")
+
+    status_line = cell_spinner._status_line
+    kernel_shell.events.register.assert_called_once_with("post_run_cell", status_line._post_run_cell)
+    display.assert_called_once_with(
+        {"text/html": cell_spinner.message_html("Downloading <data>"), "text/plain": "Downloading <data>"},
+        raw=True,
+        display_id=True,
+    )
+    assert "&lt;data&gt;" in display.call_args.args[0]["text/html"]
+    handle.update.assert_called_once_with(
+        {"text/html": cell_spinner.message_html("Processing"), "text/plain": "Processing"}, raw=True
+    )
+
+    status_line._post_run_cell(None)
+
+    handle.update.assert_called_with({"text/html": "", "text/plain": ""}, raw=True)
+    assert status_line._handle is None
+
+    # The next cell gets its own status line.
+    cell_spinner.set_message("Next cell")
+    assert display.call_count == 2
+
+
+@pytest.mark.parametrize("message", [None, ""], ids=["none", "empty"])
+def test_set_message_without_spinner_clears_or_skips_empty_message(
+    kernel_shell: MagicMock, display: MagicMock, message: str | None
+) -> None:
+    cell_spinner.set_message(message)
+    display.assert_not_called()
+
+    cell_spinner.set_message("Working")
+    cell_spinner.set_message(message)
+
+    display.return_value.update.assert_called_once_with({"text/html": "", "text/plain": ""}, raw=True)
+
+
+def test_status_line_post_run_cell_without_message_does_nothing(kernel_shell: MagicMock) -> None:
+    status_line = cell_spinner._StatusLine(kernel_shell)
+
+    status_line._post_run_cell(None)
+
+    assert status_line._handle is None
 
 
 def test_load_and_unload_ipython_extension_delegate_to_enable_and_disable(monkeypatch: pytest.MonkeyPatch) -> None:
